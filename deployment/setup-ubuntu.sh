@@ -29,12 +29,12 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE bla_checker TO bla_us
 sudo -u postgres psql -d bla_checker -c "GRANT ALL ON SCHEMA public TO bla_user;" || true
 
 echo ">>> [4/6] Installing Dependencies and Running Migrations..."
-cd /var/www/bla-checker/server
+cd /var/www/bla-checker/backend
 npm install --production=false
 npm run setup
 
 echo ">>> [5/6] Building React Frontend..."
-cd /var/www/bla-checker/client
+cd /var/www/bla-checker/frontend
 npm install
 npm run build
 

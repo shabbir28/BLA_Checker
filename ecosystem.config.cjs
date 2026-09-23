@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'bla-checker-api',
-      script: './server/src/server.js',
+      script: './backend/src/server.js',
       instances: 'max',
       exec_mode: 'cluster',
       env_production: {
