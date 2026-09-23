@@ -11,9 +11,8 @@ import UserDashboard from './components/dashboard/UserDashboard';
 import LeadCheckerStudio from './components/leads/LeadCheckerStudio';
 import SessionDetails from './components/leads/SessionDetails';
 import MasterDncManager from './components/dnc/MasterDncManager';
+import SessionsView from './components/sessions/SessionsView';
 import UserManagement from './components/admin/UserManagement';
-import ApiConfigManager from './components/admin/ApiConfigManager';
-import AuditLogsViewer from './components/admin/AuditLogsViewer';
 
 function MainApp() {
   const { user, loading, isAdmin } = useAuth();
@@ -95,13 +94,16 @@ function MainApp() {
             )
           )}
 
+          {activeTab === 'sessions' && (
+            <SessionsView
+              onSelectSession={handleSelectSession}
+              onOpenNewScrub={handleOpenNewScrub}
+            />
+          )}
+
           {activeTab === 'dnc' && <MasterDncManager />}
 
           {activeTab === 'users' && isAdmin && <UserManagement />}
-
-          {activeTab === 'api' && isAdmin && <ApiConfigManager />}
-
-          {activeTab === 'audit' && isAdmin && <AuditLogsViewer />}
         </main>
       </div>
     </div>

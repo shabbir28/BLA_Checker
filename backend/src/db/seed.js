@@ -46,33 +46,8 @@ export async function runSeeds() {
         mock_dnc_rate = EXCLUDED.mock_dnc_rate;
     `, [adminId]);
 
-    // 4. Seed Master DNC Sample Entries
-    // Generate realistic seeded DNC records across common area codes (e.g. 555-0100 through 555-0600)
-    console.log('[SEED] Populating sample Master DNC entries...');
-    const areaCodes = ['212', '310', '415', '555', '602', '702', '818', '917'];
-    const dncValues = [];
-    let counter = 0;
-
-    for (const ac of areaCodes) {
-      for (let i = 1000; i <= 1300; i++) {
-        counter++;
-        const normPhone = `${ac}234${i.toString().padStart(4, '0')}`.substring(0, 10);
-        const rawPhone = `+1 (${ac}) 234-${i.toString().padStart(4, '0')}`;
-        dncValues.push(`('${rawPhone}', '${normPhone}', 'INITIAL_SEED', 'FTC_National_Registry_Q1', 'Seeded compliance record', NOW())`);
-      }
-    }
-
-    // Chunk insert DNCs
-    const chunkSize = 500;
-    for (let i = 0; i < dncValues.length; i += chunkSize) {
-      const chunk = dncValues.slice(i, i + chunkSize);
-      const sql = `
-        INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
-        VALUES ${chunk.join(', ')}
-        ON CONFLICT (normalized_phone) DO NOTHING;
-      `;
-      await client.query(sql);
-    }
+    // 4. Master DNC initialized clean (no dummy records)
+    console.log('[SEED] Master DNC is clean and ready for user uploads.');
 
     // 5. Seed Initial Audit Log
     await client.query(`

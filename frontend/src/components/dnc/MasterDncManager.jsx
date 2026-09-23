@@ -156,7 +156,7 @@ export function MasterDncManager() {
   };
 
   const handleDeleteRecord = async (id) => {
-    if (!window.confirm('Delete this phone number from DNC database?')) return;
+    if (!window.confirm('Delete this phone number from DNC list?')) return;
     try {
       await dncApi.delete(id);
       await fetchStats();
@@ -166,16 +166,16 @@ export function MasterDncManager() {
     }
   };
 
-  if (loading) return <LoadingSpinner message="Loading DNC Database..." size="lg" />;
+  if (loading) return <LoadingSpinner message="Loading DNC Upload..." size="lg" />;
 
   return (
     <div className="space-y-6">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">DNC Database</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">DNC Upload</h2>
           <p className="text-xs md:text-sm text-zinc-400 mt-1">
-            Your master Do Not Call database. Numbers here are filtered out for free before calling any paid API.
+            Upload and manage your Do Not Call lists. Blocked numbers here are filtered out for free before calling any paid API.
           </p>
         </div>
 
@@ -288,7 +288,7 @@ export function MasterDncManager() {
       {/* Table */}
       <div className="rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden">
         {tableLoading ? (
-          <LoadingSpinner message="Searching DNC Database..." />
+          <LoadingSpinner message="Searching DNC numbers..." />
         ) : records.length > 0 ? (
           <>
             <div className="overflow-x-auto">
@@ -468,7 +468,7 @@ export function MasterDncManager() {
               disabled={!uploadFile || uploading}
               className="px-5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40"
             >
-              {uploading ? 'Uploading...' : 'Save to DNC Database'}
+              {uploading ? 'Uploading...' : 'Save to DNC'}
             </button>
           </div>
         </form>

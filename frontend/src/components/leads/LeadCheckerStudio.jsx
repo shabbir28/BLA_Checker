@@ -189,7 +189,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
           <div className="text-center max-w-lg mx-auto">
             <h2 className="text-xl font-bold text-white tracking-tight">Upload Lead File</h2>
             <p className="text-xs text-zinc-400 mt-1">
-              Select or drop your contact file. We will check every number against your DNC database and the BLA API.
+              Select or drop your contact file. We will check every number against your DNC upload list and the BLA API.
             </p>
           </div>
 

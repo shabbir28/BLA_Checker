@@ -96,7 +96,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">Admin Dashboard</h2>
           <p className="text-xs md:text-sm text-zinc-400 mt-1">
-            Overview of your DNC database, lead checking jobs, and cost savings.
+            Overview of your DNC system, upload sessions, and cost savings.
           </p>
         </div>
 
@@ -123,9 +123,9 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
       {/* 4 Simple Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="DNC Numbers in Database"
+          title="DNC Numbers Uploaded"
           value={kpis.totalMasterDnc?.toLocaleString() || '0'}
-          subtext="Saved in your master DNC list"
+          subtext="Saved in your DNC list"
           icon={Database}
           color="white"
           badge="Indexed"
@@ -271,7 +271,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
           </div>
 
           <p className="text-center text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
-            DNC numbers found via BLA API are automatically saved to your DNC Database.
+            DNC numbers found via BLA API are automatically saved to your DNC list.
           </p>
         </div>
       </div>

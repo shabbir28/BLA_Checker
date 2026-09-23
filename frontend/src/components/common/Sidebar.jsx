@@ -2,11 +2,10 @@ import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard,
-  FileCheck,
+  UploadCloud,
+  Layers,
   Database,
   Users,
-  Sliders,
-  FileText,
   ShieldCheck,
   ChevronRight,
   X,
@@ -18,14 +17,13 @@ export function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
 
   const primaryNav = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'leads', label: 'Check Leads', icon: FileCheck },
-    { id: 'dnc', label: 'DNC Database', icon: Database },
+    { id: 'leads', label: 'Upload File', icon: UploadCloud },
+    { id: 'sessions', label: 'Sessions', icon: Layers },
+    { id: 'dnc', label: 'DNC Upload', icon: Database },
   ];
 
   const adminNav = [
     { id: 'users', label: 'Users', icon: Users },
-    { id: 'api', label: 'API Settings', icon: Sliders },
-    { id: 'audit', label: 'Audit Logs', icon: FileText },
   ];
 
   const handleSelect = (id) => {

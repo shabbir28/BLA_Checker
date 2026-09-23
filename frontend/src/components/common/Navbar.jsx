@@ -8,11 +8,10 @@ export function Navbar({ onOpenNewScrub, onToggleSidebar, activeTab }) {
 
   const tabTitles = {
     dashboard: 'Dashboard',
-    leads: 'Check Leads',
-    dnc: 'DNC Database',
+    leads: 'Upload File',
+    sessions: 'Sessions',
+    dnc: 'DNC Upload',
     users: 'Users',
-    api: 'API Settings',
-    audit: 'Audit Logs',
   };
 
   return (
