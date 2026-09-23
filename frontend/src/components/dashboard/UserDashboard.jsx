@@ -4,7 +4,7 @@ import MetricCard from '../common/MetricCard';
 import StatusBadge from '../common/StatusBadge';
 import LoadingSpinner from '../common/LoadingSpinner';
 import {
-  FileCheck2,
+  FileCheck,
   ShieldCheck,
   ShieldAlert,
   Download,
@@ -33,7 +33,6 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
     fetchUserSessions();
   }, []);
 
-  // Compute aggregate personal metrics
   const totalLeads = sessions.reduce((acc, s) => acc + (s.total_rows || 0), 0);
   const totalClean = sessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
   const totalDnc = sessions.reduce(
@@ -44,26 +43,28 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
 
   return (
     <div className="space-y-6">
-      {/* Welcome & Quick Action Hero */}
-      <div className="relative overflow-hidden p-6 md:p-8 rounded-2xl glass-panel border border-slate-800 bg-gradient-to-r from-slate-900 via-brand-950/40 to-slate-900">
-        <div className="relative z-10 max-w-2xl">
-          <span className="px-3 py-1 rounded-full text-xs font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/20 mb-3 inline-block">
-            Compliance Ready
-          </span>
-          <h2 className="text-xl md:text-3xl font-extrabold text-white tracking-tight">
-            Scrub Leads Against National DNC & BLA Registry
-          </h2>
-          <p className="text-xs md:text-sm text-slate-300 mt-2 leading-relaxed">
-            Upload your contact files (CSV, XLSX, TXT) to filter out known DNC numbers. Clean verified leads are instantly available for download.
-          </p>
+      {/* Upload File Callout Box */}
+      <div className="p-6 md:p-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-center">
+        <div className="max-w-xl mx-auto space-y-4">
+          <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-white flex items-center justify-center mx-auto shadow-lg shadow-black">
+            <UploadCloud className="w-7 h-7 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">
+              Check Your Leads for DNC Compliance
+            </h2>
+            <p className="text-xs md:text-sm text-zinc-400 mt-1">
+              Upload your CSV, Excel, or TXT file. We will remove all DNC numbers so you can download a clean, safe calling list.
+            </p>
+          </div>
 
-          <div className="flex items-center gap-3 mt-6">
+          <div className="pt-2">
             <button
               onClick={onOpenNewScrub}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs md:text-sm font-semibold shadow-lg shadow-brand-500/25 transition cursor-pointer"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-zinc-200 text-black text-sm font-bold shadow-lg shadow-white/10 transition cursor-pointer"
             >
-              <UploadCloud className="w-4 h-4" />
-              <span>Start New Checking Session</span>
+              <UploadCloud className="w-4 h-4 text-black" />
+              <span>Upload Lead File</span>
             </button>
           </div>
         </div>
@@ -72,114 +73,115 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
       {/* Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
-          title="Total Leads Checked"
+          title="Total Numbers Checked"
           value={totalLeads.toLocaleString()}
-          subtext="Across all your sessions"
-          icon={FileCheck2}
-          color="brand"
+          subtext="From your uploaded files"
+          icon={FileCheck}
+          color="white"
         />
 
         <MetricCard
-          title="Clean Numbers Verified"
+          title="Clean Numbers Found"
           value={totalClean.toLocaleString()}
-          subtext="Ready for outreach"
+          subtext="Safe to call"
           icon={ShieldCheck}
           color="emerald"
+          badge="Verified"
         />
 
         <MetricCard
-          title="DNC Numbers Flagged"
+          title="DNC Numbers Blocked"
           value={totalDnc.toLocaleString()}
-          subtext="TCPA violations prevented"
+          subtext="Do Not Call numbers filtered"
           icon={ShieldAlert}
-          color="rose"
+          color="red"
+          badge="Blocked"
         />
 
         <MetricCard
-          title="Average Clean Rate"
+          title="Clean Rate"
           value={`${cleanRate}%`}
-          subtext="Clean leads verified"
+          subtext="Percentage of clean leads"
           icon={FileSpreadsheet}
           color="cyan"
         />
       </div>
 
-      {/* Recent Sessions Table with One-Click Downloads */}
-      <div className="p-6 rounded-2xl glass-panel border border-slate-800">
+      {/* Recent Files Table */}
+      <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="text-base font-semibold text-white">Your Lead Scrubbing History</h3>
-            <p className="text-xs text-slate-400">Download clean numbers or inspect detailed audit results</p>
+            <h3 className="text-sm font-bold text-white">Your Recent Files</h3>
+            <p className="text-xs text-zinc-400">Download your clean phone numbers</p>
           </div>
           <button
             onClick={fetchUserSessions}
-            className="text-xs text-brand-400 hover:text-brand-300 transition"
+            className="text-xs text-zinc-400 hover:text-white transition"
           >
             Refresh List
           </button>
         </div>
 
         {loading ? (
-          <LoadingSpinner message="Loading your sessions..." />
+          <LoadingSpinner message="Loading files..." />
         ) : sessions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+              <thead className="text-[11px] uppercase tracking-wider text-zinc-400 border-b border-zinc-800 bg-zinc-900/40">
                 <tr>
-                  <th className="pb-3 pl-2">Session Name</th>
-                  <th className="pb-3 text-right">Total Leads</th>
-                  <th className="pb-3 text-right">Clean Leads</th>
-                  <th className="pb-3 text-right">DNC Matched</th>
-                  <th className="pb-3 text-center">Status</th>
-                  <th className="pb-3 text-right">Date</th>
-                  <th className="pb-3 pr-2 text-right">Actions</th>
+                  <th className="py-3 pl-3">Session Name</th>
+                  <th className="py-3 text-right">Total Numbers</th>
+                  <th className="py-3 text-right">Clean Numbers</th>
+                  <th className="py-3 text-right">DNC Blocked</th>
+                  <th className="py-3 text-center">Status</th>
+                  <th className="py-3 text-right">Date</th>
+                  <th className="py-3 pr-3 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono">
+              <tbody className="divide-y divide-zinc-800/80 font-mono">
                 {sessions.map((session) => (
-                  <tr key={session.id} className="hover:bg-slate-900/50 transition">
-                    <td className="py-3 pl-2 font-sans font-medium text-slate-200">
+                  <tr key={session.id} className="hover:bg-zinc-900/50 transition">
+                    <td className="py-3 pl-3 font-sans font-medium text-white">
                       <div>
                         <span>{session.session_name}</span>
-                        <span className="block text-[10px] text-slate-400 font-mono">
+                        <span className="block text-[10px] text-zinc-500 font-mono">
                           {session.original_filename}
                         </span>
                       </div>
                     </td>
-                    <td className="py-3 text-right text-slate-200 font-bold">
+                    <td className="py-3 text-right text-white font-bold">
                       {session.total_rows?.toLocaleString() || 0}
                     </td>
                     <td className="py-3 text-right text-emerald-400 font-bold">
                       {session.clean_count?.toLocaleString() || 0}
                     </td>
-                    <td className="py-3 text-right text-rose-400">
+                    <td className="py-3 text-right text-red-400">
                       {((session.local_dnc_count || 0) + (session.bla_dnc_count || 0)).toLocaleString()}
                     </td>
                     <td className="py-3 text-center font-sans">
                       <StatusBadge status={session.status} size="xs" />
                     </td>
-                    <td className="py-3 text-right text-slate-400 text-[11px]">
+                    <td className="py-3 text-right text-zinc-500 text-[11px]">
                       {new Date(session.created_at).toLocaleDateString()}
                     </td>
-                    <td className="py-3 pr-2 text-right font-sans">
+                    <td className="py-3 pr-3 text-right font-sans">
                       <div className="flex items-center justify-end gap-2">
                         {session.clean_count > 0 && (
                           <a
                             href={sessionApi.getCleanExportUrl(session.id, 'csv')}
                             download
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition text-xs"
-                            title="Download Clean CSV"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60 text-xs font-semibold transition"
                           >
-                            <Download className="w-3 h-3" />
-                            <span>Clean CSV</span>
+                            <Download className="w-3.5 h-3.5" />
+                            <span>Download Clean</span>
                           </a>
                         )}
                         <button
                           onClick={() => onSelectSession(session.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-brand-600/20 hover:text-brand-300 text-slate-300 border border-slate-700/60 transition text-xs"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs transition cursor-pointer"
                         >
                           <span>View</span>
-                          <ExternalLink className="w-3 h-3" />
+                          <ExternalLink className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -189,11 +191,11 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
             </table>
           </div>
         ) : (
-          <div className="py-10 text-center text-slate-400">
-            <p className="text-sm">You haven't run any lead checks yet.</p>
+          <div className="py-12 text-center text-zinc-500">
+            <p className="text-sm">You haven't checked any files yet.</p>
             <button
               onClick={onOpenNewScrub}
-              className="mt-3 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold transition"
+              className="mt-3 px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition"
             >
               Upload Your First File
             </button>

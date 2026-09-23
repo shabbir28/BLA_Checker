@@ -10,10 +10,6 @@ import {
   Edit2,
   Trash2,
   Search,
-  CheckCircle,
-  AlertCircle,
-  Shield,
-  Key,
 } from 'lucide-react';
 
 export function UserManagement() {
@@ -29,7 +25,7 @@ export function UserManagement() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // Create Form State
+  // Forms
   const [createForm, setCreateForm] = useState({
     name: '',
     email: '',
@@ -40,7 +36,6 @@ export function UserManagement() {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState(null);
 
-  // Edit Form State
   const [editForm, setEditForm] = useState({
     name: '',
     role: 'user',
@@ -128,7 +123,7 @@ export function UserManagement() {
       alert('You cannot delete your own account.');
       return;
     }
-    if (!window.confirm(`Permanently remove user "${email}"?`)) return;
+    if (!window.confirm(`Delete user "${email}"?`)) return;
     try {
       await adminApi.deleteUser(id);
       fetchUsers(page, search);
@@ -140,13 +135,11 @@ export function UserManagement() {
   return (
     <div className="space-y-6">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl glass-panel border border-slate-800 bg-gradient-to-r from-slate-900/90 to-brand-950/20">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-            User & Access Management
-          </h2>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">
-            Provision staff accounts, configure lead quotas, assign administrator privileges, or revoke access.
+          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">User Management</h2>
+          <p className="text-xs md:text-sm text-zinc-400 mt-1">
+            Manage user accounts, assign roles, and set lead checking limits.
           </p>
         </div>
 
@@ -155,56 +148,56 @@ export function UserManagement() {
             setCreateError(null);
             setIsCreateModalOpen(true);
           }}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs md:text-sm font-semibold shadow-lg shadow-brand-500/25 transition cursor-pointer"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition shadow-md shadow-white/5 cursor-pointer"
         >
-          <UserPlus className="w-4 h-4" />
-          <span>Provision New User</span>
+          <UserPlus className="w-4 h-4 text-black" />
+          <span>Add User</span>
         </button>
       </div>
 
       {/* Search Header */}
       <div className="flex justify-between items-center">
-        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Total Users ({pagination.total || 0})
+        <span className="text-xs font-semibold text-zinc-400 font-mono">
+          Total Users: {pagination.total || 0}
         </span>
 
         <form onSubmit={handleSearchSubmit} className="relative w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or email..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-brand-500"
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-white"
           />
         </form>
       </div>
 
-      {/* Users Table */}
-      <div className="rounded-2xl glass-panel border border-slate-800 overflow-hidden">
+      {/* Table */}
+      <div className="rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden">
         {loading ? (
-          <LoadingSpinner message="Loading user directory..." />
+          <LoadingSpinner message="Loading users..." />
         ) : users.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/80 border-b border-slate-800">
+              <thead className="text-[11px] uppercase tracking-wider text-zinc-400 bg-zinc-900/60 border-b border-zinc-800">
                 <tr>
-                  <th className="py-3 pl-4">User</th>
+                  <th className="py-3 pl-4">Name & Email</th>
                   <th className="py-3">Role</th>
                   <th className="py-3">Status</th>
-                  <th className="py-3 text-right">Lead Quota</th>
-                  <th className="py-3 text-right">Sessions Run</th>
-                  <th className="py-3 text-right">Total Leads Scrubbed</th>
+                  <th className="py-3 text-right">Limit</th>
+                  <th className="py-3 text-right">Files Checked</th>
+                  <th className="py-3 text-right">Total Numbers</th>
                   <th className="py-3">Created</th>
                   <th className="py-3 pr-4 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 font-mono">
+              <tbody className="divide-y divide-zinc-800/80 font-mono">
                 {users.map((u) => (
-                  <tr key={u.id} className="hover:bg-slate-900/50 transition">
+                  <tr key={u.id} className="hover:bg-zinc-900/40 transition">
                     <td className="py-3 pl-4 font-sans">
-                      <div className="font-semibold text-slate-200">{u.name}</div>
-                      <div className="text-[11px] text-slate-400 font-mono">{u.email}</div>
+                      <div className="font-semibold text-white">{u.name}</div>
+                      <div className="text-[11px] text-zinc-500 font-mono">{u.email}</div>
                     </td>
                     <td className="py-3 font-sans">
                       <StatusBadge status={u.role} size="xs" />
@@ -212,23 +205,23 @@ export function UserManagement() {
                     <td className="py-3 font-sans">
                       <StatusBadge status={u.status} size="xs" />
                     </td>
-                    <td className="py-3 text-right text-slate-300">
+                    <td className="py-3 text-right text-zinc-300">
                       {parseInt(u.lead_quota || 0, 10).toLocaleString()}
                     </td>
-                    <td className="py-3 text-right text-slate-300">
+                    <td className="py-3 text-right text-zinc-300">
                       {parseInt(u.sessions_count || 0, 10).toLocaleString()}
                     </td>
                     <td className="py-3 text-right text-emerald-400 font-bold">
                       {parseInt(u.total_leads_scrubbed || 0, 10).toLocaleString()}
                     </td>
-                    <td className="py-3 text-slate-400 text-[11px]">
+                    <td className="py-3 text-zinc-500 text-[11px]">
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>
                     <td className="py-3 pr-4 text-right font-sans">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenEdit(u)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition"
                           title="Edit User"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
@@ -236,7 +229,7 @@ export function UserManagement() {
                         {u.id !== currentUser.id && (
                           <button
                             onClick={() => handleDeleteUser(u.id, u.email)}
-                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition"
+                            className="p-1.5 rounded-lg bg-red-950/40 hover:bg-red-900/40 text-red-400 border border-red-900/60 transition"
                             title="Delete User"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -250,92 +243,82 @@ export function UserManagement() {
             </table>
           </div>
         ) : (
-          <div className="p-12 text-center text-slate-400 font-sans">
-            <Users className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-slate-300">No users found.</p>
+          <div className="p-12 text-center text-zinc-500 font-sans">
+            <Users className="w-8 h-8 mx-auto mb-2 text-zinc-600" />
+            <p className="text-sm">No users found.</p>
           </div>
         )}
       </div>
 
-      {/* MODAL: CREATE USER */}
+      {/* CREATE MODAL */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        title="Provision New Staff User"
+        title="Add New User"
       >
         <form onSubmit={handleCreateSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Full Name *
-            </label>
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">Full Name *</label>
             <input
               type="text"
               value={createForm.name}
               onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-              placeholder="e.g. Jane Doe"
+              placeholder="e.g. John Doe"
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Email Address *
-            </label>
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">Email Address *</label>
             <input
               type="email"
               value={createForm.email}
               onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-              placeholder="jane.doe@company.com"
+              placeholder="john@example.com"
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Initial Password *
-            </label>
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">Password *</label>
             <input
               type="password"
               value={createForm.password}
               onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
               placeholder="Min 6 characters"
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                Access Role
-              </label>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1">Role</label>
               <select
                 value={createForm.role}
                 onChange={(e) => setCreateForm({ ...createForm, role: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
               >
-                <option value="user">User (Lead Scrubbing Only)</option>
-                <option value="admin">Administrator (Full Access)</option>
+                <option value="user">User</option>
+                <option value="admin">Administrator</option>
               </select>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                Lead Quota
-              </label>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1">Lead Limit</label>
               <input
                 type="number"
                 value={createForm.lead_quota}
                 onChange={(e) => setCreateForm({ ...createForm, lead_quota: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
               />
             </div>
           </div>
 
           {createError && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
               {createError}
             </div>
           )}
@@ -344,22 +327,22 @@ export function UserManagement() {
             <button
               type="button"
               onClick={() => setIsCreateModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+              className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-300 text-xs font-semibold hover:bg-zinc-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={createSubmitting}
-              className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-brand-500/20"
+              className="px-5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40"
             >
-              {createSubmitting ? 'Provisioning...' : 'Create Account'}
+              {createSubmitting ? 'Creating...' : 'Create Account'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL: EDIT USER */}
+      {/* EDIT MODAL */}
       <Modal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
@@ -367,27 +350,23 @@ export function UserManagement() {
       >
         <form onSubmit={handleEditSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Full Name
-            </label>
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">Full Name</label>
             <input
               type="text"
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                Role
-              </label>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1">Role</label>
               <select
                 value={editForm.role}
                 onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
               >
                 <option value="user">User</option>
                 <option value="admin">Administrator</option>
@@ -395,13 +374,11 @@ export function UserManagement() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                Account Status
-              </label>
+              <label className="block text-xs font-semibold text-zinc-300 mb-1">Status</label>
               <select
                 value={editForm.status}
                 onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+                className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
               >
                 <option value="active">Active</option>
                 <option value="suspended">Suspended</option>
@@ -410,32 +387,30 @@ export function UserManagement() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Lead Quota
-            </label>
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">Lead Limit</label>
             <input
               type="number"
               value={editForm.lead_quota}
               onChange={(e) => setEditForm({ ...editForm, lead_quota: e.target.value })}
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
               Reset Password (Optional)
             </label>
             <input
               type="password"
               value={editForm.newPassword}
               onChange={(e) => setEditForm({ ...editForm, newPassword: e.target.value })}
-              placeholder="Leave blank to keep existing password"
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              placeholder="Leave blank to keep current password"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           {editError && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
               {editError}
             </div>
           )}
@@ -444,14 +419,14 @@ export function UserManagement() {
             <button
               type="button"
               onClick={() => setIsEditModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+              className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-300 text-xs font-semibold hover:bg-zinc-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={editSubmitting}
-              className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-brand-500/20"
+              className="px-5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40"
             >
               {editSubmitting ? 'Saving...' : 'Save Changes'}
             </button>

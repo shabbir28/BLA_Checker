@@ -3,21 +3,16 @@ import { dncApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../common/Modal';
 import LoadingSpinner from '../common/LoadingSpinner';
-import StatusBadge from '../common/StatusBadge';
 import {
   Database,
   UploadCloud,
-  PlusCircle,
+  Plus,
   Download,
   Search,
   Trash2,
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  CheckCircle,
-  AlertCircle,
-  Sparkles,
-  RefreshCw,
 } from 'lucide-react';
 
 export function MasterDncManager() {
@@ -127,7 +122,7 @@ export function MasterDncManager() {
       await fetchStats();
       await fetchRecords(1, sourceFilter, search);
     } catch (err) {
-      setUploadError(err.response?.data?.message || 'Failed to process DNC file upload.');
+      setUploadError(err.response?.data?.message || 'Failed to upload DNC file.');
     } finally {
       setUploading(false);
     }
@@ -154,14 +149,14 @@ export function MasterDncManager() {
       await fetchStats();
       await fetchRecords(1, sourceFilter, search);
     } catch (err) {
-      setSingleError(err.response?.data?.message || 'Failed to add phone to DNC.');
+      setSingleError(err.response?.data?.message || 'Failed to add phone number.');
     } finally {
       setSingleSubmitting(false);
     }
   };
 
   const handleDeleteRecord = async (id) => {
-    if (!window.confirm('Delete this record from Master DNC?')) return;
+    if (!window.confirm('Delete this phone number from DNC database?')) return;
     try {
       await dncApi.delete(id);
       await fetchStats();
@@ -171,18 +166,16 @@ export function MasterDncManager() {
     }
   };
 
-  if (loading) return <LoadingSpinner message="Accessing Master DNC Repository..." size="lg" />;
+  if (loading) return <LoadingSpinner message="Loading DNC Database..." size="lg" />;
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl glass-panel border border-slate-800 bg-gradient-to-r from-slate-900/90 to-brand-950/20">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-            Master DNC Repository
-          </h2>
-          <p className="text-xs md:text-sm text-slate-400 mt-1">
-            Internal centralized registry of Do Not Call phone numbers. Verified against all uploaded leads to eliminate external API expenses.
+          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">DNC Database</h2>
+          <p className="text-xs md:text-sm text-zinc-400 mt-1">
+            Your master Do Not Call database. Numbers here are filtered out for free before calling any paid API.
           </p>
         </div>
 
@@ -190,17 +183,17 @@ export function MasterDncManager() {
           <a
             href={dncApi.getExportUrl(sourceFilter)}
             download
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 transition"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export DNC</span>
+            <span>Download DNC List</span>
           </a>
 
           <button
             onClick={() => setIsSingleModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 transition cursor-pointer"
           >
-            <PlusCircle className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" />
             <span>Add Single</span>
           </button>
 
@@ -211,69 +204,68 @@ export function MasterDncManager() {
               setUploadError(null);
               setIsUploadModalOpen(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-500/25 transition cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition shadow-md shadow-white/5 cursor-pointer"
           >
-            <UploadCloud className="w-4 h-4" />
-            <span>Bulk Upload DNC</span>
+            <UploadCloud className="w-4 h-4 text-black" />
+            <span>DNC Upload</span>
           </button>
         </div>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl glass-panel border border-slate-800">
-          <span className="text-xs text-slate-400 block mb-1">Total Indexed DNCs</span>
+        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
+          <span className="text-xs text-zinc-400 block mb-1">Total DNC Numbers</span>
           <span className="text-2xl font-bold text-white font-mono">
             {stats?.total?.toLocaleString() || 0}
           </span>
-          <span className="text-[11px] text-slate-400 block mt-1">Ready for indexed search</span>
+          <span className="text-[11px] text-zinc-500 block mt-1">Ready for fast matching</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/20">
-          <span className="text-xs text-purple-400 font-semibold block mb-1">BLA Auto-Synced</span>
-          <span className="text-2xl font-bold text-purple-400 font-mono">
+        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
+          <span className="text-xs text-zinc-400 block mb-1">Auto-Synced from BLA</span>
+          <span className="text-2xl font-bold text-emerald-400 font-mono">
             {(stats?.bySource?.find((s) => s.source === 'BLA_SYNC')?.count || 0).toLocaleString()}
           </span>
-          <span className="text-[11px] text-slate-400 block mt-1">From previous lead checks</span>
+          <span className="text-[11px] text-zinc-500 block mt-1">Saved from past file checks</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-brand-500/5 border border-brand-500/20">
-          <span className="text-xs text-brand-400 font-semibold block mb-1">Manual / Batch Uploads</span>
-          <span className="text-2xl font-bold text-brand-400 font-mono">
+        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
+          <span className="text-xs text-zinc-400 block mb-1">Uploaded Numbers</span>
+          <span className="text-2xl font-bold text-white font-mono">
             {(
               (stats?.bySource?.find((s) => s.source === 'MANUAL_UPLOAD')?.count || 0) +
               (stats?.bySource?.find((s) => s.source === 'INITIAL_SEED')?.count || 0)
             ).toLocaleString()}
           </span>
-          <span className="text-[11px] text-slate-400 block mt-1">Internal compliance lists</span>
+          <span className="text-[11px] text-zinc-500 block mt-1">Bulk and seeded DNC lists</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-          <span className="text-xs text-emerald-400 font-semibold block mb-1">Added Last 24h</span>
-          <span className="text-2xl font-bold text-emerald-400 font-mono">
+        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
+          <span className="text-xs text-zinc-400 block mb-1">Added Last 24 Hours</span>
+          <span className="text-2xl font-bold text-white font-mono">
             {stats?.addedLast24h?.toLocaleString() || 0}
           </span>
-          <span className="text-[11px] text-slate-400 block mt-1">Live synchronizations</span>
+          <span className="text-[11px] text-zinc-500 block mt-1">New additions</span>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
+      {/* Filter and Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        {/* Source Filter Tabs */}
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-900 border border-slate-800 overflow-x-auto">
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800 overflow-x-auto">
           {[
-            { id: 'ALL', label: 'All Sources' },
-            { id: 'MANUAL_UPLOAD', label: 'Bulk Uploads' },
-            { id: 'BLA_SYNC', label: 'BLA Synced' },
-            { id: 'INITIAL_SEED', label: 'National Registry' },
+            { id: 'ALL', label: 'All Numbers' },
+            { id: 'MANUAL_UPLOAD', label: 'DNC Uploads' },
+            { id: 'BLA_SYNC', label: 'BLA Auto-Synced' },
+            { id: 'INITIAL_SEED', label: 'Seeded List' },
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => handleSourceChange(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                 sourceFilter === tab.id
-                  ? 'bg-brand-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? 'bg-zinc-800 text-white'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
               }`}
             >
               {tab.label}
@@ -281,71 +273,62 @@ export function MasterDncManager() {
           ))}
         </div>
 
-        {/* Search */}
         <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search phone number..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-white text-xs placeholder-slate-500 focus:outline-none focus:border-brand-500"
+            className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
           />
         </form>
       </div>
 
-      {/* DNC Records Table */}
-      <div className="rounded-2xl glass-panel border border-slate-800 overflow-hidden">
+      {/* Table */}
+      <div className="rounded-2xl bg-zinc-950 border border-zinc-800 overflow-hidden">
         {tableLoading ? (
-          <LoadingSpinner message="Searching Master DNC database..." />
+          <LoadingSpinner message="Searching DNC Database..." />
         ) : records.length > 0 ? (
           <>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs font-mono">
-                <thead className="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/80 border-b border-slate-800">
+                <thead className="text-[11px] uppercase tracking-wider text-zinc-400 bg-zinc-900/60 border-b border-zinc-800">
                   <tr>
-                    <th className="py-3 pl-4">Raw Phone</th>
-                    <th className="py-3">Normalized Phone</th>
-                    <th className="py-3">Source Channel</th>
-                    <th className="py-3">Campaign / File</th>
+                    <th className="py-3 pl-4">Phone Number</th>
+                    <th className="py-3">Standard 10-Digit</th>
+                    <th className="py-3">Source</th>
+                    <th className="py-3">File / Campaign</th>
                     <th className="py-3">Notes</th>
                     <th className="py-3">Date Added</th>
                     {isAdmin && <th className="py-3 pr-4 text-right">Action</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-zinc-800/80">
                   {records.map((rec) => (
-                    <tr key={rec.id} className="hover:bg-slate-900/50 transition">
-                      <td className="py-3 pl-4 text-slate-300 font-medium">{rec.phone_number}</td>
-                      <td className="py-3 text-slate-200 font-semibold">{rec.normalized_phone}</td>
+                    <tr key={rec.id} className="hover:bg-zinc-900/40 transition">
+                      <td className="py-3 pl-4 text-zinc-300 font-medium">{rec.phone_number}</td>
+                      <td className="py-3 text-white font-semibold">{rec.normalized_phone}</td>
                       <td className="py-3 font-sans">
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                            rec.source === 'BLA_SYNC'
-                              ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
-                              : rec.source === 'INITIAL_SEED'
-                              ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20'
-                              : 'bg-brand-500/10 text-brand-300 border-brand-500/20'
-                          }`}
-                        >
-                          {rec.source}
+                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-zinc-900 text-zinc-300 border-zinc-800">
+                          {rec.source === 'BLA_SYNC' ? 'BLA Synced' : rec.source}
                         </span>
                       </td>
-                      <td className="py-3 font-sans text-slate-400 text-xs truncate max-w-[150px]">
+                      <td className="py-3 font-sans text-zinc-400 text-xs truncate max-w-[150px]">
                         {rec.campaign_or_file || '—'}
                       </td>
-                      <td className="py-3 font-sans text-slate-400 text-xs truncate max-w-[200px]">
+                      <td className="py-3 font-sans text-zinc-400 text-xs truncate max-w-[200px]">
                         {rec.notes || '—'}
                       </td>
-                      <td className="py-3 text-slate-400 text-[11px]">
+                      <td className="py-3 text-zinc-500 text-[11px]">
                         {new Date(rec.created_at).toLocaleDateString()}
                       </td>
                       {isAdmin && (
                         <td className="py-3 pr-4 text-right font-sans">
                           <button
                             onClick={() => handleDeleteRecord(rec.id)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
-                            title="Delete DNC Number"
+                            className="p-1 rounded text-zinc-500 hover:text-red-400 hover:bg-zinc-900 transition"
+                            title="Delete Number"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -357,29 +340,29 @@ export function MasterDncManager() {
               </table>
             </div>
 
-            {/* Pagination Controls */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800 text-xs text-slate-400">
+            {/* Pagination */}
+            <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800 text-xs text-zinc-400 font-sans">
               <span>
                 Showing {(page - 1) * pagination.limit + 1} to{' '}
                 {Math.min(page * pagination.limit, pagination.total)} of {pagination.total.toLocaleString()}{' '}
-                records
+                numbers
               </span>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 font-mono">
                 <button
                   onClick={() => handlePageChange(page - 1)}
                   disabled={page <= 1}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"
+                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-800 transition"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="font-mono text-slate-200">
+                <span className="text-white">
                   Page {page} of {pagination.totalPages || 1}
                 </span>
                 <button
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page >= pagination.totalPages}
-                  className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-800 transition"
+                  className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-zinc-800 transition"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -387,24 +370,23 @@ export function MasterDncManager() {
             </div>
           </>
         ) : (
-          <div className="p-12 text-center text-slate-400 font-sans">
-            <Database className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-            <p className="text-sm font-medium text-slate-300">No DNC records found.</p>
-            <p className="text-xs text-slate-400 mt-1">Try clearing your search term or upload a new DNC list.</p>
+          <div className="p-12 text-center text-zinc-500 font-sans">
+            <Database className="w-8 h-8 mx-auto mb-2 text-zinc-600" />
+            <p className="text-sm">No DNC numbers found.</p>
           </div>
         )}
       </div>
 
-      {/* MODAL: BULK UPLOAD DNC */}
+      {/* MODAL: BULK DNC UPLOAD */}
       <Modal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        title="Bulk Ingest Master DNC File"
+        title="DNC Upload (Bulk File)"
       >
         <form onSubmit={handleUploadSubmit} className="space-y-4">
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-slate-700 hover:border-brand-500/60 bg-slate-900/40 rounded-xl p-6 text-center cursor-pointer transition"
+            className="border-2 border-dashed border-zinc-800 hover:border-zinc-600 bg-zinc-900/40 rounded-xl p-6 text-center cursor-pointer transition"
           >
             <input
               type="file"
@@ -413,62 +395,63 @@ export function MasterDncManager() {
               accept=".csv,.xlsx,.xls,.txt"
               className="hidden"
             />
-            <UploadCloud className="w-8 h-8 text-brand-400 mx-auto mb-2" />
+            <UploadCloud className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
             {uploadFile ? (
               <div>
-                <span className="text-xs font-semibold text-emerald-400 block">{uploadFile.name}</span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-xs font-bold text-white block">{uploadFile.name}</span>
+                <span className="text-[11px] text-zinc-500 font-mono">
                   {(uploadFile.size / 1024).toFixed(1)} KB
                 </span>
               </div>
             ) : (
               <div>
-                <span className="text-xs font-medium text-slate-200 block">
-                  Click or drag CSV, XLSX, or TXT file here
+                <span className="text-xs font-semibold text-white block">
+                  Click to select CSV, Excel (.xlsx), or TXT file
                 </span>
-                <span className="text-[11px] text-slate-400">Numbers will be deduplicated and normalized</span>
+                <span className="text-[11px] text-zinc-500">
+                  Numbers will be deduplicated and saved to Master DNC
+                </span>
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Campaign / List Identifier
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+              List Name / Identifier
             </label>
             <input
               type="text"
               value={campaignName}
               onChange={(e) => setCampaignName(e.target.value)}
-              placeholder="e.g. FTC_National_DNC_Update_2026"
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              placeholder="e.g. National_DNC_Update"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Notes / Audit Context
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+              Notes (Optional)
             </label>
             <input
               type="text"
               value={uploadNotes}
               onChange={(e) => setUploadNotes(e.target.value)}
-              placeholder="e.g. Direct opt-out list supplied by legal department"
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              placeholder="e.g. Added by compliance team"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           {uploadError && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
               {uploadError}
             </div>
           )}
 
           {uploadResult && (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs space-y-1">
-              <span className="font-semibold block">Upload Complete!</span>
-              <div>Added New: {uploadResult.addedNew.toLocaleString()}</div>
-              <div>Already in DB / Duplicates: {uploadResult.duplicatesOrExisting.toLocaleString()}</div>
-              <div>Invalid Numbers: {uploadResult.invalidCount.toLocaleString()}</div>
+            <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs space-y-1">
+              <span className="font-bold block">Upload Success!</span>
+              <div>Added: {uploadResult.addedNew.toLocaleString()} new numbers</div>
+              <div>Already in database: {uploadResult.duplicatesOrExisting.toLocaleString()}</div>
             </div>
           )}
 
@@ -476,22 +459,22 @@ export function MasterDncManager() {
             <button
               type="button"
               onClick={() => setIsUploadModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+              className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-300 text-xs font-semibold hover:bg-zinc-800"
             >
               Close
             </button>
             <button
               type="submit"
               disabled={!uploadFile || uploading}
-              className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-brand-500/20"
+              className="px-5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40"
             >
-              {uploading ? 'Processing File...' : 'Ingest DNC Records'}
+              {uploading ? 'Uploading...' : 'Save to DNC Database'}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL: ADD SINGLE DNC */}
+      {/* MODAL: ADD SINGLE NUMBER */}
       <Modal
         isOpen={isSingleModalOpen}
         onClose={() => setIsSingleModalOpen(false)}
@@ -499,47 +482,47 @@ export function MasterDncManager() {
       >
         <form onSubmit={handleSingleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
               Phone Number *
             </label>
             <input
               type="text"
               value={singlePhone}
               onChange={(e) => setSinglePhone(e.target.value)}
-              placeholder="e.g. (555) 123-4567 or 5551234567"
+              placeholder="e.g. 555-123-4567 or 5551234567"
               required
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white font-mono"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Campaign / Source
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+              Source / Reason
             </label>
             <input
               type="text"
               value={singleCampaign}
               onChange={(e) => setSingleCampaign(e.target.value)}
-              placeholder="e.g. Direct Consumer Request"
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              placeholder="e.g. Customer Opt-Out"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
-              Notes
+            <label className="block text-xs font-semibold text-zinc-300 mb-1">
+              Notes (Optional)
             </label>
             <input
               type="text"
               value={singleNotes}
               onChange={(e) => setSingleNotes(e.target.value)}
-              placeholder="e.g. Inbound call opt-out on 09/23"
-              className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:outline-none focus:border-brand-500"
+              placeholder="e.g. Call center request"
+              className="w-full px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-white"
             />
           </div>
 
           {singleError && (
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
               {singleError}
             </div>
           )}
@@ -548,16 +531,16 @@ export function MasterDncManager() {
             <button
               type="button"
               onClick={() => setIsSingleModalOpen(false)}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium"
+              className="px-4 py-2 rounded-xl bg-zinc-900 text-zinc-300 text-xs font-semibold hover:bg-zinc-800"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={singleSubmitting}
-              className="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-50 text-white text-xs font-semibold shadow-md shadow-brand-500/20"
+              className="px-5 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40"
             >
-              {singleSubmitting ? 'Saving...' : 'Add to DNC Database'}
+              {singleSubmitting ? 'Saving...' : 'Add Number'}
             </button>
           </div>
         </form>

@@ -5,83 +5,83 @@ export function StatusBadge({ status, label, size = 'sm' }) {
 
   const configs = {
     CLEAN: {
-      bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      bg: 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60',
       dot: 'bg-emerald-400',
-      text: label || 'Clean / Safe',
+      text: label || 'Clean',
     },
     LOCAL_DNC: {
-      bg: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+      bg: 'bg-amber-950/40 text-amber-300 border-amber-800/60',
       dot: 'bg-amber-400',
-      text: label || 'Master DNC Match',
+      text: label || 'DNC (Existing)',
     },
     BLA_DNC: {
-      bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-      dot: 'bg-rose-400',
-      text: label || 'BLA DNC Match',
+      bg: 'bg-red-950/40 text-red-300 border-red-800/60',
+      dot: 'bg-red-400',
+      text: label || 'DNC (BLA)',
     },
     INVALID: {
-      bg: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
-      dot: 'bg-slate-400',
-      text: label || 'Invalid Number',
+      bg: 'bg-zinc-900 text-zinc-400 border-zinc-800',
+      dot: 'bg-zinc-500',
+      text: label || 'Invalid',
     },
     DUPLICATE: {
-      bg: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-      dot: 'bg-purple-400',
+      bg: 'bg-zinc-900 text-zinc-400 border-zinc-800',
+      dot: 'bg-zinc-500',
       text: label || 'Duplicate',
     },
     PROCESSING: {
-      bg: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 animate-pulse',
-      dot: 'bg-indigo-400',
-      text: label || 'Processing',
+      bg: 'bg-blue-950/40 text-blue-300 border-blue-800/60 animate-pulse',
+      dot: 'bg-blue-400',
+      text: label || 'Checking...',
     },
     QUEUED: {
-      bg: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-      dot: 'bg-blue-400',
+      bg: 'bg-zinc-900 text-zinc-300 border-zinc-800',
+      dot: 'bg-zinc-400',
       text: label || 'Queued',
     },
     COMPLETED: {
-      bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      bg: 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60',
       dot: 'bg-emerald-400',
-      text: label || 'Completed',
+      text: label || 'Done',
     },
     FAILED: {
-      bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-      dot: 'bg-rose-400',
+      bg: 'bg-red-950/40 text-red-300 border-red-800/60',
+      dot: 'bg-red-400',
       text: label || 'Failed',
     },
     ACTIVE: {
-      bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+      bg: 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60',
       dot: 'bg-emerald-400',
       text: label || 'Active',
     },
     SUSPENDED: {
-      bg: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
-      dot: 'bg-rose-400',
+      bg: 'bg-red-950/40 text-red-300 border-red-800/60',
+      dot: 'bg-red-400',
       text: label || 'Suspended',
     },
     ADMIN: {
-      bg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-      dot: 'bg-cyan-400',
+      bg: 'bg-zinc-900 text-white border-zinc-700',
+      dot: 'bg-white',
       text: label || 'Admin',
     },
     USER: {
-      bg: 'bg-brand-500/10 text-brand-300 border-brand-500/20',
-      dot: 'bg-brand-400',
+      bg: 'bg-zinc-900 text-zinc-300 border-zinc-800',
+      dot: 'bg-zinc-400',
       text: label || 'User',
     },
   };
 
   const config = configs[normStatus] || {
-    bg: 'bg-slate-700/30 text-slate-300 border-slate-700',
-    dot: 'bg-slate-400',
+    bg: 'bg-zinc-900 text-zinc-300 border-zinc-800',
+    dot: 'bg-zinc-400',
     text: label || normStatus,
   };
 
-  const sizeClasses = size === 'xs' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-xs font-medium';
+  const sizeClasses = size === 'xs' ? 'px-2 py-0.5 text-[11px]' : 'px-2.5 py-1 text-xs font-medium';
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border ${config.bg} ${sizeClasses} transition-colors`}
+      className={`inline-flex items-center gap-1.5 rounded-full border ${config.bg} ${sizeClasses}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${config.dot}`} />
       {config.text}

@@ -23,8 +23,8 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <LoadingSpinner message="Bootstrapping BLA Compliance Suite..." size="lg" />
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <LoadingSpinner message="Loading BLA Checker..." size="lg" />
       </div>
     );
   }
@@ -44,7 +44,7 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-black text-white flex flex-col md:flex-row">
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
