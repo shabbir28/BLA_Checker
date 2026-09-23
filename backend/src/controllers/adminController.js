@@ -4,6 +4,27 @@ import blaService from '../services/blaService.js';
 
 export async function getDashboardAnalytics(req, res) {
   try {
+    const { startDate, endDate } = req.query;
+
+    const sessionsWhereClauses = [];
+    const joinedWhereClauses = [];
+    const params = [];
+
+    if (startDate) {
+      params.push(startDate);
+      sessionsWhereClauses.push(`created_at >= $${params.length}`);
+      joinedWhereClauses.push(`s.created_at >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(endDate);
+      sessionsWhereClauses.push(`created_at <= $${params.length}`);
+      joinedWhereClauses.push(`s.created_at <= $${params.length}`);
+    }
+
+    const sessionsWhereSql = sessionsWhereClauses.length > 0 ? `WHERE ${sessionsWhereClauses.join(' AND ')}` : '';
+    const joinedWhereSql = joinedWhereClauses.length > 0 ? `WHERE ${joinedWhereClauses.join(' AND ')}` : '';
+
     // 1. Core KPIs
     const dncCountRes = await query('SELECT COUNT(*) as total_dnc FROM master_dnc');
     const sessionsAggRes = await query(`
@@ -13,21 +34,38 @@ export async function getDashboardAnalytics(req, res) {
         COALESCE(SUM(clean_count), 0) as total_clean,
         COALESCE(SUM(local_dnc_count), 0) as total_local_dnc,
         COALESCE(SUM(bla_dnc_count), 0) as total_bla_dnc,
+        COALESCE(SUM(clean_count + bla_dnc_count), 0) as total_bla_checked,
         COALESCE(SUM(invalid_numbers), 0) as total_invalid,
         COALESCE(SUM(api_calls_saved), 0) as total_api_saved,
         COUNT(CASE WHEN status IN ('QUEUED', 'PROCESSING') THEN 1 END) as active_sessions,
         COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as completed_sessions
       FROM checking_sessions
+      ${sessionsWhereSql}
+    `, params);
+
+    // Today specific BLA checked count
+    const todayBlaRes = await query(`
+      SELECT
+        COALESCE(SUM(clean_count + bla_dnc_count), 0) as today_bla_checked,
+        COALESCE(SUM(total_rows), 0) as today_total_leads,
+        COALESCE(SUM(clean_count), 0) as today_clean,
+        COALESCE(SUM(local_dnc_count), 0) as today_local_dnc,
+        COALESCE(SUM(bla_dnc_count), 0) as today_bla_dnc
+      FROM checking_sessions
+      WHERE created_at >= CURRENT_DATE
     `);
 
-    const usersCountRes = await query('SELECT COUNT(*) as total_users FROM users WHERE status = \'active\'');
+    const usersCountRes = await query("SELECT COUNT(*) as total_users FROM users WHERE status = 'active'");
 
     const totalDnc = parseInt(dncCountRes.rows[0].total_dnc, 10);
     const agg = sessionsAggRes.rows[0];
+    const todayAgg = todayBlaRes.rows[0];
+
     const totalLeads = parseInt(agg.total_leads_checked, 10);
     const totalClean = parseInt(agg.total_clean, 10);
     const totalLocalDnc = parseInt(agg.total_local_dnc, 10);
     const totalBlaDnc = parseInt(agg.total_bla_dnc, 10);
+    const totalBlaChecked = parseInt(agg.total_bla_checked, 10);
     const totalDncMatched = totalLocalDnc + totalBlaDnc;
     const totalApiSaved = parseInt(agg.total_api_saved, 10);
 
@@ -35,31 +73,35 @@ export async function getDashboardAnalytics(req, res) {
     const cleanRate = totalVerified > 0 ? ((totalClean / totalVerified) * 100).toFixed(1) : 0;
     const estimatedCostSaved = (totalApiSaved * 0.005).toFixed(2); // $0.005 per saved API call
 
-    // 2. 30-Day Activity Chart
+    // 2. Timeline chart (filtered or last 30 days)
+    const timelineWhere = sessionsWhereSql || "WHERE created_at >= NOW() - INTERVAL '30 days'";
     const timelineRes = await query(`
       SELECT
         TO_CHAR(created_at, 'YYYY-MM-DD') as day,
         COUNT(*) as session_count,
         COALESCE(SUM(total_rows), 0) as total_leads,
         COALESCE(SUM(clean_count), 0) as clean_leads,
+        COALESCE(SUM(clean_count + bla_dnc_count), 0) as bla_checked_leads,
         COALESCE(SUM(local_dnc_count + bla_dnc_count), 0) as dnc_leads,
         COALESCE(SUM(api_calls_saved), 0) as api_saved
       FROM checking_sessions
-      WHERE created_at >= NOW() - INTERVAL '30 days'
+      ${timelineWhere}
       GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
       ORDER BY day ASC
-    `);
+    `, sessionsWhereSql ? params : []);
 
-    // 3. Recent Sessions
+    // 3. Recent Sessions (with date filter if applied)
     const recentSessionsRes = await query(`
       SELECT s.id, s.session_name, s.original_filename, s.total_rows, s.clean_count,
-             s.local_dnc_count, s.bla_dnc_count, s.status, s.stage, s.progress_percent,
+             s.local_dnc_count, s.bla_dnc_count, (s.clean_count + s.bla_dnc_count) as bla_checked,
+             s.status, s.stage, s.progress_percent,
              s.api_calls_saved, s.created_at, u.name as user_name, u.email as user_email
       FROM checking_sessions s
       LEFT JOIN users u ON s.user_id = u.id
+      ${joinedWhereSql}
       ORDER BY s.created_at DESC
-      LIMIT 8
-    `);
+      LIMIT 10
+    `, params);
 
     // 4. Source Breakdown in Master DNC
     const sourceBreakdownRes = await query(`
@@ -77,6 +119,12 @@ export async function getDashboardAnalytics(req, res) {
         totalDncMatched,
         totalLocalDnc,
         totalBlaDnc,
+        totalBlaChecked,
+        todayBlaChecked: parseInt(todayAgg.today_bla_checked, 10),
+        todayTotalLeads: parseInt(todayAgg.today_total_leads, 10),
+        todayClean: parseInt(todayAgg.today_clean, 10),
+        todayLocalDnc: parseInt(todayAgg.today_local_dnc, 10),
+        todayBlaDnc: parseInt(todayAgg.today_bla_dnc, 10),
         cleanRatePercent: parseFloat(cleanRate),
         apiCallsSaved: totalApiSaved,
         estimatedCostSavedUsd: parseFloat(estimatedCostSaved),

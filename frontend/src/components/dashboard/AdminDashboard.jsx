@@ -3,17 +3,17 @@ import { adminApi, sessionApi } from '../../services/api';
 import MetricCard from '../common/MetricCard';
 import StatusBadge from '../common/StatusBadge';
 import LoadingSpinner from '../common/LoadingSpinner';
+import DateRangeSelector from '../common/DateRangeSelector';
 import {
   Database,
   FileCheck,
   ShieldCheck,
-  DollarSign,
   RefreshCw,
   Download,
   ExternalLink,
-  UploadCloud,
   FileSpreadsheet,
   AlertTriangle,
+  Zap,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -29,16 +29,31 @@ import {
   Legend,
 } from 'recharts';
 
-export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUpload }) {
+export function AdminDashboard({ onSelectSession }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  const fetchAnalytics = async () => {
+  // Initialize with Today matching Image 2
+  const [dateRange, setDateRange] = useState(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      id: 'today',
+      label: 'Today',
+      startDate: `${today}T00:00:00.000Z`,
+      endDate: `${today}T23:59:59.999Z`,
+    };
+  });
+
+  const fetchAnalytics = async (selectedRange = dateRange) => {
     try {
       setRefreshing(true);
-      const res = await adminApi.getAnalytics();
+      const params = {};
+      if (selectedRange?.startDate) params.startDate = selectedRange.startDate;
+      if (selectedRange?.endDate) params.endDate = selectedRange.endDate;
+
+      const res = await adminApi.getAnalytics(params);
       setData(res.data);
       setError(null);
     } catch (err) {
@@ -51,10 +66,15 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
   };
 
   useEffect(() => {
-    fetchAnalytics();
-    const interval = setInterval(fetchAnalytics, 30000);
+    fetchAnalytics(dateRange);
+    const interval = setInterval(() => fetchAnalytics(dateRange), 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [dateRange]);
+
+  const handleDateRangeChange = (newRange) => {
+    setDateRange(newRange);
+    fetchAnalytics(newRange);
+  };
 
   if (loading) return <LoadingSpinner message="Loading dashboard..." size="lg" />;
   if (error) {
@@ -63,7 +83,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
         <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
         <p className="text-red-300 text-sm mb-4">{error}</p>
         <button
-          onClick={fetchAnalytics}
+          onClick={() => fetchAnalytics(dateRange)}
           className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold"
         >
           Retry
@@ -91,54 +111,52 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Quick Actions */}
+      {/* Top Banner with Date Selector & Refresh (Matching Image 2) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">Admin Dashboard</h2>
           <p className="text-xs md:text-sm text-zinc-400 mt-1">
-            Overview of your DNC system, upload sessions, and cost savings.
+            Real-time analytics for BLA compliance verification, lead files, and DNC suppression.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-3">
+          {/* Custom Date Range Dropdown Selector */}
+          <DateRangeSelector value={dateRange} onChange={handleDateRangeChange} />
+
           <button
-            onClick={fetchAnalytics}
+            onClick={() => fetchAnalytics(dateRange)}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
-
-          <button
-            onClick={onOpenNewScrub}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-bold transition shadow-md shadow-white/5 cursor-pointer"
-          >
-            <UploadCloud className="w-4 h-4 text-black" />
-            <span>Upload File</span>
-          </button>
         </div>
       </div>
 
-      {/* 4 Simple Metric Cards */}
+      {/* 4 Core KPI Cards with BLA Checked Count */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: BLA Numbers Checked for Selected Date / Today */}
         <MetricCard
-          title="DNC Numbers Uploaded"
-          value={kpis.totalMasterDnc?.toLocaleString() || '0'}
-          subtext="Saved in your DNC list"
-          icon={Database}
-          color="white"
-          badge="Indexed"
+          title={dateRange.id === 'today' ? 'BLA Checks Today' : `BLA Checks (${dateRange.label})`}
+          value={kpis.totalBlaChecked?.toLocaleString() || '0'}
+          subtext="Verified via Blacklist Alliance API"
+          icon={Zap}
+          color="amber"
+          badge="Live BLA"
         />
 
+        {/* KPI 2: Total Leads Checked */}
         <MetricCard
           title="Total Leads Checked"
           value={kpis.totalLeadsChecked?.toLocaleString() || '0'}
           subtext={`${kpis.completedSessions || 0} completed files`}
           icon={FileCheck}
-          color="cyan"
+          color="white"
         />
 
+        {/* KPI 3: Fresh Clean Numbers */}
         <MetricCard
           title="Clean Numbers Found"
           value={kpis.totalCleanLeads?.toLocaleString() || '0'}
@@ -148,13 +166,14 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
           badge="Verified Safe"
         />
 
+        {/* KPI 4: Already in DNC Database */}
         <MetricCard
-          title="Money Saved"
-          value={`$${kpis.estimatedCostSavedUsd || '0.00'}`}
-          subtext={`${(kpis.apiCallsSaved || 0).toLocaleString()} free DNC checks`}
-          icon={DollarSign}
-          color="emerald"
-          badge="Free Checks"
+          title="DNC in Database"
+          value={kpis.totalLocalDnc?.toLocaleString() || '0'}
+          subtext="Skipped before BLA API"
+          icon={Database}
+          color="cyan"
+          badge="Intercepted"
         />
       </div>
 
@@ -292,8 +311,9 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
                 <th className="py-3 pl-3">Session Name</th>
                 <th className="py-3">User</th>
                 <th className="py-3 text-right">Total Numbers</th>
-                <th className="py-3 text-right">Clean</th>
-                <th className="py-3 text-right">DNC Blocked</th>
+                <th className="py-3 text-right">Already in DNC</th>
+                <th className="py-3 text-right">DNC from BLA</th>
+                <th className="py-3 text-right">Fresh Numbers</th>
                 <th className="py-3 text-center">Status</th>
                 <th className="py-3 pr-3 text-right">Actions</th>
               </tr>
@@ -316,11 +336,28 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub, onOpenDncUploa
                     <td className="py-3 text-right text-white font-bold">
                       {session.total_rows?.toLocaleString() || 0}
                     </td>
-                    <td className="py-3 text-right text-emerald-400 font-bold">
-                      {session.clean_count?.toLocaleString() || 0}
+                    <td className="py-3 text-right">
+                      {(session.local_dnc_count || 0) > 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 font-mono font-semibold text-[11px] border border-amber-800/40">
+                          {session.local_dnc_count.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600 font-mono">0</span>
+                      )}
                     </td>
-                    <td className="py-3 text-right text-red-400">
-                      {((session.local_dnc_count || 0) + (session.bla_dnc_count || 0)).toLocaleString()}
+                    <td className="py-3 text-right">
+                      {(session.bla_dnc_count || 0) > 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 font-mono font-semibold text-[11px] border border-red-800/40">
+                          {session.bla_dnc_count.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600 font-mono">0</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-right">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-mono font-semibold text-[11px] border border-emerald-800/40">
+                        {session.clean_count?.toLocaleString() || 0}
+                      </span>
                     </td>
                     <td className="py-3 text-center font-sans">
                       <StatusBadge status={session.status} size="xs" />

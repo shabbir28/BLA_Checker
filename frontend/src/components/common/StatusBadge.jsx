@@ -12,12 +12,12 @@ export function StatusBadge({ status, label, size = 'sm' }) {
     LOCAL_DNC: {
       bg: 'bg-amber-950/40 text-amber-300 border-amber-800/60',
       dot: 'bg-amber-400',
-      text: label || 'DNC (Existing)',
+      text: label || 'Already in DNC',
     },
     BLA_DNC: {
       bg: 'bg-red-950/40 text-red-300 border-red-800/60',
       dot: 'bg-red-400',
-      text: label || 'DNC (BLA)',
+      text: label || 'DNC from BLA',
     },
     INVALID: {
       bg: 'bg-zinc-900 text-zinc-400 border-zinc-800',

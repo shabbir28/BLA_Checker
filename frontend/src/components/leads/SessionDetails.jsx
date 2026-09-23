@@ -110,7 +110,7 @@ export function SessionDetails({ sessionId, onBack }) {
   const filterTabs = [
     { id: 'ALL', label: 'All Numbers', count: session.total_rows },
     { id: 'CLEAN', label: 'Clean Numbers', count: session.clean_count },
-    { id: 'LOCAL_DNC', label: 'DNC in Database', count: session.local_dnc_count },
+    { id: 'LOCAL_DNC', label: 'Already in DNC', count: session.local_dnc_count },
     { id: 'BLA_DNC', label: 'DNC from BLA', count: session.bla_dnc_count },
     { id: 'INVALID', label: 'Invalid', count: session.invalid_numbers },
   ];
@@ -185,23 +185,16 @@ export function SessionDetails({ sessionId, onBack }) {
         </div>
 
         {/* Summary Numbers */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
           <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
-            <span className="text-[11px] text-zinc-400 block">Total</span>
+            <span className="text-[11px] text-zinc-400 block">Total in File</span>
             <span className="text-lg font-bold text-white font-mono mt-0.5 block">
               {session.total_rows?.toLocaleString() || 0}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-900/40">
-            <span className="text-[11px] text-emerald-400 font-medium block">Clean</span>
-            <span className="text-lg font-extrabold text-emerald-400 font-mono mt-0.5 block">
-              {session.clean_count?.toLocaleString() || 0}
-            </span>
-          </div>
-
           <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-900/40">
-            <span className="text-[11px] text-amber-400 font-medium block">DNC in Database</span>
+            <span className="text-[11px] text-amber-400 font-medium block">Already in DNC</span>
             <span className="text-lg font-bold text-amber-400 font-mono mt-0.5 block">
               {session.local_dnc_count?.toLocaleString() || 0}
             </span>
@@ -214,10 +207,10 @@ export function SessionDetails({ sessionId, onBack }) {
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 col-span-2 sm:col-span-1">
-            <span className="text-[11px] text-zinc-400 block">Money Saved</span>
-            <span className="text-lg font-bold text-white font-mono mt-0.5 block">
-              ${((session.api_calls_saved || 0) * 0.005).toFixed(2)}
+          <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-900/40">
+            <span className="text-[11px] text-emerald-400 font-medium block">Fresh Numbers</span>
+            <span className="text-lg font-extrabold text-emerald-400 font-mono mt-0.5 block">
+              {session.clean_count?.toLocaleString() || 0}
             </span>
           </div>
         </div>

@@ -122,10 +122,9 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
   // Calculate summary counts
   const totalChecked = sessions.reduce((acc, s) => acc + (s.total_rows || 0), 0);
   const totalClean = sessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
-  const totalDnc = sessions.reduce(
-    (acc, s) => acc + (s.local_dnc_count || 0) + (s.bla_dnc_count || 0),
-    0
-  );
+  const totalLocalDnc = sessions.reduce((acc, s) => acc + (s.local_dnc_count || 0), 0);
+  const totalBlaDnc = sessions.reduce((acc, s) => acc + (s.bla_dnc_count || 0), 0);
+  const totalDnc = totalLocalDnc + totalBlaDnc;
 
   const formatDate = (dateString) => {
     if (!dateString) return '—';
@@ -154,7 +153,7 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
           <button
             onClick={() => fetchSessions()}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold border border-zinc-800 transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -170,50 +169,61 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
         </div>
       </div>
 
-      {/* Summary Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
+      {/* Summary Stats Row: Total Sessions, Numbers Checked, Already in DNC, DNC from BLA, Fresh Numbers */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
           <div className="flex items-center justify-between text-zinc-400 mb-1">
-            <span className="text-xs">Total Sessions</span>
-            <Layers className="w-4 h-4 text-zinc-500" />
+            <span className="text-[11px]">Total Sessions</span>
+            <Layers className="w-3.5 h-3.5 text-zinc-500" />
           </div>
-          <span className="text-2xl font-bold text-white font-mono">
+          <span className="text-xl font-bold text-white font-mono">
             {pagination.total || sessions.length}
           </span>
-          <span className="text-[11px] text-zinc-500 block mt-1">Saved file uploads</span>
+          <span className="text-[10px] text-zinc-500 block mt-0.5">Saved files</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
+        <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800">
           <div className="flex items-center justify-between text-zinc-400 mb-1">
-            <span className="text-xs">Numbers Checked</span>
-            <FileSpreadsheet className="w-4 h-4 text-zinc-500" />
+            <span className="text-[11px]">Total Leads</span>
+            <FileSpreadsheet className="w-3.5 h-3.5 text-zinc-500" />
           </div>
-          <span className="text-2xl font-bold text-white font-mono">
+          <span className="text-xl font-bold text-white font-mono">
             {totalChecked.toLocaleString()}
           </span>
-          <span className="text-[11px] text-zinc-500 block mt-1">Total leads processed</span>
+          <span className="text-[10px] text-zinc-500 block mt-0.5">Uploaded numbers</span>
         </div>
 
-        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
-          <div className="flex items-center justify-between text-zinc-400 mb-1">
-            <span className="text-xs">Clean Numbers</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+        <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-900/40">
+          <div className="flex items-center justify-between text-amber-400 mb-1">
+            <span className="text-[11px] font-medium">Already in DNC</span>
+            <span className="w-2 h-2 rounded-full bg-amber-400" />
           </div>
-          <span className="text-2xl font-bold text-emerald-400 font-mono">
+          <span className="text-xl font-bold text-amber-400 font-mono">
+            {totalLocalDnc.toLocaleString()}
+          </span>
+          <span className="text-[10px] text-amber-400/80 block mt-0.5">Skipped from BLA</span>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-red-950/20 border border-red-900/40">
+          <div className="flex items-center justify-between text-red-400 mb-1">
+            <span className="text-[11px] font-medium">DNC from BLA</span>
+            <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+          </div>
+          <span className="text-xl font-bold text-red-400 font-mono">
+            {totalBlaDnc.toLocaleString()}
+          </span>
+          <span className="text-[10px] text-red-400/80 block mt-0.5">Added to DNC DB</span>
+        </div>
+
+        <div className="p-3.5 rounded-xl bg-emerald-950/20 border border-emerald-900/40 col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between text-emerald-400 mb-1">
+            <span className="text-[11px] font-medium">Fresh Numbers</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          </div>
+          <span className="text-xl font-bold text-emerald-400 font-mono">
             {totalClean.toLocaleString()}
           </span>
-          <span className="text-[11px] text-zinc-500 block mt-1">Safe to call</span>
-        </div>
-
-        <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800">
-          <div className="flex items-center justify-between text-zinc-400 mb-1">
-            <span className="text-xs">DNC Blocked</span>
-            <ShieldAlert className="w-4 h-4 text-red-500" />
-          </div>
-          <span className="text-2xl font-bold text-red-400 font-mono">
-            {totalDnc.toLocaleString()}
-          </span>
-          <span className="text-[11px] text-zinc-500 block mt-1">Removed from lists</span>
+          <span className="text-[10px] text-emerald-400/80 block mt-0.5">Clean & Safe</span>
         </div>
       </div>
 
@@ -316,15 +326,15 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
                   <th className="py-3 px-4">Upload Date</th>
                   {isAdmin && scopeFilter === 'all' && <th className="py-3 px-4">Uploader</th>}
                   <th className="py-3 px-4 text-right">Total Leads</th>
-                  <th className="py-3 px-4 text-right">Clean Leads</th>
-                  <th className="py-3 px-4 text-right">DNC Found</th>
+                  <th className="py-3 px-4 text-right">Already in DNC</th>
+                  <th className="py-3 px-4 text-right">DNC from BLA</th>
+                  <th className="py-3 px-4 text-right">Fresh Numbers</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/80">
                 {filteredSessions.map((session) => {
-                  const dncCount = (session.local_dnc_count || 0) + (session.bla_dnc_count || 0);
                   const isProcessing =
                     session.status === 'PROCESSING' || session.status === 'QUEUED';
 
@@ -378,22 +388,33 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
                         {(session.total_rows || 0).toLocaleString()}
                       </td>
 
-                      {/* Clean Leads */}
+                      {/* Already in DNC */}
                       <td className="py-3.5 px-4 text-right">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-mono font-semibold text-[11px] border border-emerald-800/40">
-                          {(session.clean_count || 0).toLocaleString()}
-                        </span>
-                      </td>
-
-                      {/* DNC Blocked */}
-                      <td className="py-3.5 px-4 text-right">
-                        {dncCount > 0 ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 font-mono font-semibold text-[11px] border border-red-800/40">
-                            {dncCount.toLocaleString()}
+                        {(session.local_dnc_count || 0) > 0 ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 font-mono font-semibold text-[11px] border border-amber-800/40">
+                            {session.local_dnc_count.toLocaleString()}
                           </span>
                         ) : (
                           <span className="text-zinc-600 font-mono">0</span>
                         )}
+                      </td>
+
+                      {/* DNC from BLA */}
+                      <td className="py-3.5 px-4 text-right">
+                        {(session.bla_dnc_count || 0) > 0 ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 font-mono font-semibold text-[11px] border border-red-800/40">
+                            {session.bla_dnc_count.toLocaleString()}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-600 font-mono">0</span>
+                        )}
+                      </td>
+
+                      {/* Fresh Numbers (Clean) */}
+                      <td className="py-3.5 px-4 text-right">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-mono font-semibold text-[11px] border border-emerald-800/40">
+                          {(session.clean_count || 0).toLocaleString()}
+                        </span>
                       </td>
 
                       {/* Status */}

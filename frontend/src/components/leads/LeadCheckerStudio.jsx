@@ -22,6 +22,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
   // File Upload State
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
 
   // Preview State
@@ -58,6 +59,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
       return;
     }
     setFile(selectedFile);
+    setUploadProgress(0);
     setUploadError(null);
   };
 
@@ -65,12 +67,15 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
     if (!file) return;
     try {
       setUploading(true);
+      setUploadProgress(0);
       setUploadError(null);
 
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await sessionApi.preview(formData);
+      const res = await sessionApi.preview(formData, (percent) => {
+        setUploadProgress(percent);
+      });
       setPreviewData(res.data);
       setSelectedColumn(res.data.detectedPhoneColumn || res.data.columns[0] || 'phone');
       setSessionName(`Check_${file.name.replace(/\.[^/.]+$/, '')}`);
@@ -232,6 +237,25 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             )}
           </div>
 
+          {/* Upload Progress Bar */}
+          {uploading && (
+            <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-zinc-300 font-medium flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  {uploadProgress < 100 ? `Uploading file (${uploadProgress}%)...` : 'Reading file structure...'}
+                </span>
+                <span className="text-emerald-400 font-bold font-mono">{uploadProgress}%</span>
+              </div>
+              <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
+                <div
+                  className="h-full bg-emerald-500 rounded-full transition-all duration-150"
+                  style={{ width: `${Math.max(5, uploadProgress)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {uploadError && (
             <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
@@ -245,7 +269,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
               disabled={!file || uploading}
               className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white hover:bg-zinc-200 disabled:opacity-40 text-black text-xs md:text-sm font-bold transition cursor-pointer shadow-md shadow-white/5"
             >
-              <span>{uploading ? 'Reading File...' : 'Next Step'}</span>
+              <span>{uploading ? (uploadProgress < 100 ? `Uploading ${uploadProgress}%...` : 'Reading...') : 'Next Step'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -391,31 +415,35 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
           {/* Live Counters */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
             <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
-              <span className="text-xs text-zinc-400 block mb-1">Total Numbers</span>
+              <span className="text-xs text-zinc-400 block mb-1">Total in File</span>
               <span className="text-xl font-bold text-white font-mono">
                 {activeSession.total_rows?.toLocaleString() || 0}
               </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/40">
-              <span className="text-xs text-emerald-400 font-medium block mb-1">Clean Numbers</span>
-              <span className="text-xl font-bold text-emerald-400 font-mono">
-                {activeSession.clean_count?.toLocaleString() || 0}
-              </span>
+              <span className="text-[10px] text-zinc-500 block mt-0.5">Uploaded numbers</span>
             </div>
 
             <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-900/40">
-              <span className="text-xs text-amber-400 font-medium block mb-1">DNC in Database (Free)</span>
+              <span className="text-xs text-amber-400 font-medium block mb-1">Already in DNC DB</span>
               <span className="text-xl font-bold text-amber-400 font-mono">
                 {activeSession.local_dnc_count?.toLocaleString() || 0}
               </span>
+              <span className="text-[10px] text-amber-400/80 block mt-0.5">Skipped from BLA</span>
             </div>
 
             <div className="p-4 rounded-xl bg-red-950/20 border border-red-900/40">
-              <span className="text-xs text-red-400 font-medium block mb-1">DNC from BLA API</span>
+              <span className="text-xs text-red-400 font-medium block mb-1">DNC from BLA</span>
               <span className="text-xl font-bold text-red-400 font-mono">
                 {activeSession.bla_dnc_count?.toLocaleString() || 0}
               </span>
+              <span className="text-[10px] text-red-400/80 block mt-0.5">Added to DNC list</span>
+            </div>
+
+            <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/40">
+              <span className="text-xs text-emerald-400 font-medium block mb-1">Fresh Numbers</span>
+              <span className="text-xl font-bold text-emerald-400 font-mono">
+                {activeSession.clean_count?.toLocaleString() || 0}
+              </span>
+              <span className="text-[10px] text-emerald-500 block mt-0.5">Safe & Clean</span>
             </div>
           </div>
 
@@ -441,17 +469,42 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             </p>
           </div>
 
-          {/* Result Cards */}
+          {/* 4 Cards: Total in File, Already in DB, From BLA, Fresh Numbers */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            {/* 1. Total Numbers in File */}
             <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
-              <span className="text-xs text-zinc-400 block mb-1">Total Numbers</span>
+              <span className="text-xs text-zinc-400 block mb-1">Total in File</span>
               <span className="text-2xl font-bold text-white font-mono">
                 {activeSession.total_rows?.toLocaleString() || 0}
               </span>
+              <span className="text-[11px] text-zinc-500 block mt-1">Uploaded leads</span>
             </div>
 
+            {/* 2. Already in DNC Database */}
+            <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-900/50">
+              <span className="text-xs text-amber-400 font-bold block mb-1">Already in DNC Database</span>
+              <span className="text-2xl font-extrabold text-amber-400 font-mono">
+                {activeSession.local_dnc_count?.toLocaleString() || 0}
+              </span>
+              <span className="text-[11px] text-amber-400/80 block mt-1">
+                Skipped BLA API
+              </span>
+            </div>
+
+            {/* 3. DNC from BLA */}
+            <div className="p-4 rounded-xl bg-red-950/30 border border-red-900/50">
+              <span className="text-xs text-red-400 font-bold block mb-1">DNC from BLA</span>
+              <span className="text-2xl font-extrabold text-red-400 font-mono">
+                {activeSession.bla_dnc_count?.toLocaleString() || 0}
+              </span>
+              <span className="text-[11px] text-red-400/80 block mt-1">
+                Saved to Master DNC
+              </span>
+            </div>
+
+            {/* 4. Fresh Numbers */}
             <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
-              <span className="text-xs text-emerald-400 font-bold block mb-1">Clean Numbers</span>
+              <span className="text-xs text-emerald-400 font-bold block mb-1">Fresh Numbers</span>
               <span className="text-2xl font-extrabold text-emerald-400 font-mono">
                 {activeSession.clean_count?.toLocaleString() || 0}
               </span>
@@ -459,27 +512,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
                 {activeSession.total_rows > 0
                   ? ((activeSession.clean_count / activeSession.total_rows) * 100).toFixed(1)
                   : 0}
-                % Clean
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/60">
-              <span className="text-xs text-red-400 font-bold block mb-1">DNC Blocked</span>
-              <span className="text-2xl font-extrabold text-red-400 font-mono">
-                {((activeSession.local_dnc_count || 0) + (activeSession.bla_dnc_count || 0)).toLocaleString()}
-              </span>
-              <span className="text-[11px] text-red-400/80 block mt-1">
-                {activeSession.local_dnc_count || 0} in DB · {activeSession.bla_dnc_count || 0} from BLA
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
-              <span className="text-xs text-zinc-400 block mb-1">Money Saved</span>
-              <span className="text-2xl font-bold text-white font-mono">
-                ${((activeSession.api_calls_saved || 0) * 0.005).toFixed(2)}
-              </span>
-              <span className="text-[11px] text-zinc-500 block mt-1">
-                {activeSession.api_calls_saved || 0} free checks
+                % Clean Verified
               </span>
             </div>
           </div>

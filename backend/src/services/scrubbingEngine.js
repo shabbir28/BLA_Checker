@@ -286,18 +286,21 @@ class ScrubbingEngine {
 
       if (newDncToSync.length > 0) {
         console.log(`[ENGINE] Auto-syncing ${newDncToSync.length} newly discovered BLA DNC numbers into master_dnc...`);
-        const syncChunkSize = 500;
+        const syncChunkSize = 5000;
         for (let i = 0; i < newDncToSync.length; i += syncChunkSize) {
           const chunk = newDncToSync.slice(i, i + syncChunkSize);
-          const values = chunk.map(
-            (c) =>
-              `('${c.phone}', '${c.phone}', 'BLA_SYNC', '${session.session_name.replace(/'/g, "''")}', '${c.reason.replace(/'/g, "''")}', NOW())`
+          const chunkPhones = chunk.map((c) => c.phone);
+          const chunkSource = new Array(chunk.length).fill('BLA_SYNC');
+          const chunkFile = new Array(chunk.length).fill(session.session_name || 'BLA_SCRUB');
+          const chunkNotes = chunk.map((c) => c.reason || 'Flagged by Blacklist Alliance');
+
+          await query(
+            `INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
+             SELECT p, p, s, f, no, NOW()
+             FROM UNNEST($1::varchar[], $2::varchar[], $3::varchar[], $4::text[]) AS t(p, s, f, no)
+             ON CONFLICT (normalized_phone) DO NOTHING;`,
+            [chunkPhones, chunkSource, chunkFile, chunkNotes]
           );
-          await query(`
-            INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
-            VALUES ${values.join(', ')}
-            ON CONFLICT (normalized_phone) DO NOTHING;
-          `);
         }
       }
 
@@ -309,36 +312,27 @@ class ScrubbingEngine {
         [sessionId]
       );
 
-      console.log(`[ENGINE] Bulk inserting ${allRecords.length} session records...`);
-      const recordChunkSize = 1000;
+      console.log(`[ENGINE] Bulk inserting ${allRecords.length} session records via UNNEST...`);
+      const recordChunkSize = 5000;
       for (let i = 0; i < allRecords.length; i += recordChunkSize) {
         const chunk = allRecords.slice(i, i + recordChunkSize);
-        const client = await pool.connect();
-        try {
-          await client.query('BEGIN');
-          for (const rec of chunk) {
-            await client.query(
-              `INSERT INTO session_records
-               (session_id, raw_phone, normalized_phone, original_row_data, status, reason, bla_response_raw)
-               VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-              [
-                rec.session_id,
-                rec.raw_phone,
-                rec.normalized_phone,
-                JSON.stringify(rec.original_row_data),
-                rec.status,
-                rec.reason,
-                JSON.stringify(rec.bla_response_raw),
-              ]
-            );
-          }
-          await client.query('COMMIT');
-        } catch (insertErr) {
-          await client.query('ROLLBACK');
-          throw insertErr;
-        } finally {
-          client.release();
-        }
+
+        const sIds = new Array(chunk.length).fill(sessionId);
+        const rawPhones = chunk.map((r) => r.raw_phone || '');
+        const normPhones = chunk.map((r) => r.normalized_phone || null);
+        const origData = chunk.map((r) => JSON.stringify(r.original_row_data || {}));
+        const statuses = chunk.map((r) => r.status);
+        const reasons = chunk.map((r) => r.reason || null);
+        const blaRaws = chunk.map((r) => (r.bla_response_raw ? JSON.stringify(r.bla_response_raw) : null));
+
+        await query(
+          `INSERT INTO session_records
+           (session_id, raw_phone, normalized_phone, original_row_data, status, reason, bla_response_raw, created_at)
+           SELECT s_id, raw_p, norm_p, orig_d::jsonb, stat, reas, bla_r::jsonb, NOW()
+           FROM UNNEST($1::uuid[], $2::varchar[], $3::varchar[], $4::text[], $5::varchar[], $6::text[], $7::text[])
+             AS t(s_id, raw_p, norm_p, orig_d, stat, reas, bla_r);`,
+          [sIds, rawPhones, normPhones, origData, statuses, reasons, blaRaws]
+        );
       }
 
       // 8. Mark Session Completed

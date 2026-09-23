@@ -3,24 +3,40 @@ import { sessionApi } from '../../services/api';
 import MetricCard from '../common/MetricCard';
 import StatusBadge from '../common/StatusBadge';
 import LoadingSpinner from '../common/LoadingSpinner';
+import DateRangeSelector from '../common/DateRangeSelector';
 import {
   FileCheck,
   ShieldCheck,
   ShieldAlert,
   Download,
   ExternalLink,
-  UploadCloud,
   FileSpreadsheet,
+  Zap,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 
-export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
+export function UserDashboard({ onSelectSession }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dateRange, setDateRange] = useState(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      id: 'today',
+      label: 'Today',
+      startDate: `${today}T00:00:00.000Z`,
+      endDate: `${today}T23:59:59.999Z`,
+    };
+  });
 
-  const fetchUserSessions = async () => {
+  const fetchUserSessions = async (selectedRange = dateRange) => {
     try {
       setLoading(true);
-      const res = await sessionApi.list({ limit: 10 });
+      const params = { limit: 50 };
+      if (selectedRange?.startDate) params.startDate = selectedRange.startDate;
+      if (selectedRange?.endDate) params.endDate = selectedRange.endDate;
+
+      const res = await sessionApi.list(params);
       setSessions(res.data.data || []);
     } catch (err) {
       console.error('[USER DASHBOARD] Error loading sessions:', err);
@@ -30,80 +46,98 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
   };
 
   useEffect(() => {
-    fetchUserSessions();
-  }, []);
+    fetchUserSessions(dateRange);
+  }, [dateRange]);
 
-  const totalLeads = sessions.reduce((acc, s) => acc + (s.total_rows || 0), 0);
-  const totalClean = sessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
-  const totalDnc = sessions.reduce(
-    (acc, s) => acc + (s.local_dnc_count || 0) + (s.bla_dnc_count || 0),
+  const handleDateRangeChange = (newRange) => {
+    setDateRange(newRange);
+    fetchUserSessions(newRange);
+  };
+
+  // Filter sessions according to selected range
+  const filteredSessions = sessions.filter((s) => {
+    if (!dateRange.startDate || !dateRange.endDate) return true;
+    const sessionTime = new Date(s.created_at).getTime();
+    const startTime = new Date(dateRange.startDate).getTime();
+    const endTime = new Date(dateRange.endDate).getTime();
+    return sessionTime >= startTime && sessionTime <= endTime;
+  });
+
+  const displaySessions = filteredSessions.length > 0 ? filteredSessions : sessions;
+
+  const totalLeads = displaySessions.reduce((acc, s) => acc + (s.total_rows || 0), 0);
+  const totalClean = displaySessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
+  const totalLocalDnc = displaySessions.reduce((acc, s) => acc + (s.local_dnc_count || 0), 0);
+  const totalBlaDnc = displaySessions.reduce((acc, s) => acc + (s.bla_dnc_count || 0), 0);
+  const totalBlaChecked = displaySessions.reduce(
+    (acc, s) => acc + (s.clean_count || 0) + (s.bla_dnc_count || 0),
     0
   );
   const cleanRate = totalLeads > 0 ? ((totalClean / totalLeads) * 100).toFixed(1) : 0;
 
   return (
     <div className="space-y-6">
-      {/* Upload File Callout Box */}
-      <div className="p-6 md:p-8 rounded-2xl bg-zinc-950 border border-zinc-800 text-center">
-        <div className="max-w-xl mx-auto space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-white flex items-center justify-center mx-auto shadow-lg shadow-black">
-            <UploadCloud className="w-7 h-7 text-emerald-400" />
-          </div>
-          <div>
-            <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-              Check Your Leads for DNC Compliance
-            </h2>
-            <p className="text-xs md:text-sm text-zinc-400 mt-1">
-              Upload your CSV, Excel, or TXT file. We will remove all DNC numbers so you can download a clean, safe calling list.
-            </p>
-          </div>
+      {/* Top Banner with Date Selector & Refresh */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">User Dashboard</h2>
+          <p className="text-xs md:text-sm text-zinc-400 mt-1">
+            Track your verified lead batches, clean numbers, and Blacklist Alliance API checks.
+          </p>
+        </div>
 
-          <div className="pt-2">
-            <button
-              onClick={onOpenNewScrub}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white hover:bg-zinc-200 text-black text-sm font-bold shadow-lg shadow-white/10 transition cursor-pointer"
-            >
-              <UploadCloud className="w-4 h-4 text-black" />
-              <span>Upload Lead File</span>
-            </button>
-          </div>
+        <div className="flex items-center gap-3">
+          <DateRangeSelector value={dateRange} onChange={handleDateRangeChange} />
+
+          <button
+            onClick={() => fetchUserSessions(dateRange)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh</span>
+          </button>
         </div>
       </div>
 
-      {/* Metric Cards */}
+      {/* 4 Core KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* KPI 1: Numbers Checked via BLA */}
         <MetricCard
-          title="Total Numbers Checked"
+          title={dateRange.id === 'today' ? 'BLA Checks Today' : `BLA Checks (${dateRange.label})`}
+          value={totalBlaChecked.toLocaleString()}
+          subtext="Verified via Blacklist Alliance API"
+          icon={Zap}
+          color="amber"
+          badge="Live BLA"
+        />
+
+        {/* KPI 2: Total Numbers Checked */}
+        <MetricCard
+          title="Total Leads Checked"
           value={totalLeads.toLocaleString()}
           subtext="From your uploaded files"
           icon={FileCheck}
           color="white"
         />
 
+        {/* KPI 3: Fresh Clean Numbers */}
         <MetricCard
           title="Clean Numbers Found"
           value={totalClean.toLocaleString()}
-          subtext="Safe to call"
+          subtext={`${cleanRate}% clean rate`}
           icon={ShieldCheck}
           color="emerald"
           badge="Verified"
         />
 
+        {/* KPI 4: Already in DNC Database */}
         <MetricCard
-          title="DNC Numbers Blocked"
-          value={totalDnc.toLocaleString()}
-          subtext="Do Not Call numbers filtered"
-          icon={ShieldAlert}
-          color="red"
-          badge="Blocked"
-        />
-
-        <MetricCard
-          title="Clean Rate"
-          value={`${cleanRate}%`}
-          subtext="Percentage of clean leads"
-          icon={FileSpreadsheet}
+          title="DNC in Database"
+          value={totalLocalDnc.toLocaleString()}
+          subtext="Pre-filtered before BLA API"
+          icon={Database}
           color="cyan"
+          badge="Intercepted"
         />
       </div>
 
@@ -131,8 +165,9 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
                 <tr>
                   <th className="py-3 pl-3">Session Name</th>
                   <th className="py-3 text-right">Total Numbers</th>
-                  <th className="py-3 text-right">Clean Numbers</th>
-                  <th className="py-3 text-right">DNC Blocked</th>
+                  <th className="py-3 text-right">Already in DNC</th>
+                  <th className="py-3 text-right">DNC from BLA</th>
+                  <th className="py-3 text-right">Fresh Numbers</th>
                   <th className="py-3 text-center">Status</th>
                   <th className="py-3 text-right">Date</th>
                   <th className="py-3 pr-3 text-right">Actions</th>
@@ -152,11 +187,28 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
                     <td className="py-3 text-right text-white font-bold">
                       {session.total_rows?.toLocaleString() || 0}
                     </td>
-                    <td className="py-3 text-right text-emerald-400 font-bold">
-                      {session.clean_count?.toLocaleString() || 0}
+                    <td className="py-3 text-right">
+                      {(session.local_dnc_count || 0) > 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 font-mono font-semibold text-[11px] border border-amber-800/40">
+                          {session.local_dnc_count.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600 font-mono">0</span>
+                      )}
                     </td>
-                    <td className="py-3 text-right text-red-400">
-                      {((session.local_dnc_count || 0) + (session.bla_dnc_count || 0)).toLocaleString()}
+                    <td className="py-3 text-right">
+                      {(session.bla_dnc_count || 0) > 0 ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 font-mono font-semibold text-[11px] border border-red-800/40">
+                          {session.bla_dnc_count.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600 font-mono">0</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-right">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-mono font-semibold text-[11px] border border-emerald-800/40">
+                        {session.clean_count?.toLocaleString() || 0}
+                      </span>
                     </td>
                     <td className="py-3 text-center font-sans">
                       <StatusBadge status={session.status} size="xs" />

@@ -69,23 +69,24 @@ export async function uploadMasterDnc(req, res) {
     const uniqueNorms = Array.from(uniqueMap.keys());
     console.log(`[DNC] Inserting ${uniqueNorms.length} unique normalized DNC numbers...`);
 
-    // Ingest into master_dnc in batches of 1,000 using PostgreSQL multi-value insert
+    // Ingest into master_dnc using PostgreSQL UNNEST in batches of 10,000 (ultra-fast)
     let addedCount = 0;
-    const chunkSize = 1000;
+    const chunkSize = 10000;
 
     for (let i = 0; i < uniqueNorms.length; i += chunkSize) {
-      const chunk = uniqueNorms.slice(i, i + chunkSize);
-      const values = chunk.map(
-        (norm) =>
-          `('${uniqueMap.get(norm).replace(/'/g, "''")}', '${norm}', '${sourceName.replace(/'/g, "''")}', '${originalName.replace(/'/g, "''")}', '${notes.replace(/'/g, "''")}', NOW())`
-      );
+      const chunkNorms = uniqueNorms.slice(i, i + chunkSize);
+      const chunkRaw = chunkNorms.map((n) => uniqueMap.get(n) || n);
+      const chunkSource = new Array(chunkNorms.length).fill(sourceName);
+      const chunkFile = new Array(chunkNorms.length).fill(originalName);
+      const chunkNotes = new Array(chunkNorms.length).fill(notes);
 
-      const insertRes = await query(`
-        INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
-        VALUES ${values.join(', ')}
-        ON CONFLICT (normalized_phone) DO NOTHING
-        RETURNING id;
-      `);
+      const insertRes = await query(
+        `INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
+         SELECT p, n, s, f, no, NOW()
+         FROM UNNEST($1::varchar[], $2::varchar[], $3::varchar[], $4::varchar[], $5::text[]) AS t(p, n, s, f, no)
+         ON CONFLICT (normalized_phone) DO NOTHING;`,
+        [chunkRaw, chunkNorms, chunkSource, chunkFile, chunkNotes]
+      );
 
       addedCount += insertRes.rowCount;
     }

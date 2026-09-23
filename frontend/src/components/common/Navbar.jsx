@@ -32,17 +32,8 @@ export function Navbar({ onOpenNewScrub, onToggleSidebar, activeTab }) {
 
       {/* Right Actions */}
       <div className="flex items-center gap-3 md:gap-4">
-        {/* Upload File Button */}
-        <button
-          onClick={onOpenNewScrub}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs md:text-sm font-semibold transition cursor-pointer shadow-md shadow-white/5"
-        >
-          <UploadCloud className="w-4 h-4 text-black" />
-          <span>Upload File</span>
-        </button>
-
         {/* User Profile */}
-        <div className="flex items-center gap-2.5 pl-3 border-l border-zinc-800">
+        <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white text-xs font-bold">
             {user?.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
           </div>

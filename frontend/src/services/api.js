@@ -42,9 +42,15 @@ export const authApi = {
 export const dncApi = {
   getStats: () => api.get('/dnc/stats'),
   list: (params) => api.get('/dnc/list', { params }),
-  upload: (formData) =>
+  upload: (formData, onProgress) =>
     api.post('/dnc/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
     }),
   addSingle: (data) => api.post('/dnc/single', data),
   delete: (id) => api.delete(`/dnc/${id}`),
@@ -52,9 +58,15 @@ export const dncApi = {
 };
 
 export const sessionApi = {
-  preview: (formData) =>
+  preview: (formData, onProgress) =>
     api.post('/sessions/preview', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          onProgress(percent);
+        }
+      },
     }),
   start: (data) => api.post('/sessions/start', data),
   list: (params) => api.get('/sessions/list', { params }),
@@ -66,7 +78,7 @@ export const sessionApi = {
 };
 
 export const adminApi = {
-  getAnalytics: () => api.get('/admin/analytics'),
+  getAnalytics: (params) => api.get('/admin/analytics', { params }),
   getUsers: (params) => api.get('/admin/users', { params }),
   createUser: (data) => api.post('/admin/users', data),
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
