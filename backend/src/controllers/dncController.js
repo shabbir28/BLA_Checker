@@ -4,6 +4,7 @@ import xlsx from 'xlsx';
 import csvParser from 'csv-parser';
 import { query, pool } from '../config/db.js';
 import { normalizePhone, detectPhoneColumn } from '../utils/phoneNormalizer.js';
+import { copyIntoTable } from '../utils/bulkCopy.js';
 
 export async function uploadMasterDnc(req, res) {
   if (!req.file) {
@@ -66,32 +67,44 @@ export async function uploadMasterDnc(req, res) {
       }
     }
 
-    const uniqueNorms = Array.from(uniqueMap.keys());
-    console.log(`[DNC] Inserting ${uniqueNorms.length} unique normalized DNC numbers...`);
+    const uniqueCount = uniqueMap.size;
+    console.log(`[DNC] Bulk COPY of ${uniqueCount} unique normalized DNC numbers...`);
 
-    // Ingest into master_dnc using PostgreSQL UNNEST in batches of 10,000 (ultra-fast)
+    // Ingest via PostgreSQL COPY into a temp table, then a single de-duplicating INSERT.
+    // This replaces hundreds of INSERT round trips and is the fastest path for millions of rows.
     let addedCount = 0;
-    const chunkSize = 10000;
-
-    for (let i = 0; i < uniqueNorms.length; i += chunkSize) {
-      const chunkNorms = uniqueNorms.slice(i, i + chunkSize);
-      const chunkRaw = chunkNorms.map((n) => uniqueMap.get(n) || n);
-      const chunkSource = new Array(chunkNorms.length).fill(sourceName);
-      const chunkFile = new Array(chunkNorms.length).fill(originalName);
-      const chunkNotes = new Array(chunkNorms.length).fill(notes);
-
-      const insertRes = await query(
-        `INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
-         SELECT p, n, s, f, no, NOW()
-         FROM UNNEST($1::varchar[], $2::varchar[], $3::varchar[], $4::varchar[], $5::text[]) AS t(p, n, s, f, no)
-         ON CONFLICT (normalized_phone) DO NOTHING;`,
-        [chunkRaw, chunkNorms, chunkSource, chunkFile, chunkNotes]
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'CREATE TEMP TABLE tmp_dnc_import (phone_number varchar, normalized_phone varchar) ON COMMIT DROP'
       );
 
-      addedCount += insertRes.rowCount;
+      await copyIntoTable(
+        client,
+        'COPY tmp_dnc_import (phone_number, normalized_phone) FROM STDIN WITH (FORMAT csv)',
+        uniqueMap, // iterates as [normalized, raw]
+        ([norm, raw]) => [raw, norm]
+      );
+
+      const insertRes = await client.query(
+        `INSERT INTO master_dnc (phone_number, normalized_phone, source, campaign_or_file, notes, created_at)
+         SELECT phone_number, normalized_phone, $1, $2, $3, NOW()
+         FROM tmp_dnc_import
+         ON CONFLICT (normalized_phone) DO NOTHING`,
+        [sourceName, originalName, notes]
+      );
+      addedCount = insertRes.rowCount;
+
+      await client.query('COMMIT');
+    } catch (copyErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw copyErr;
+    } finally {
+      client.release();
     }
 
-    const existingDuplicates = uniqueNorms.length - addedCount;
+    const existingDuplicates = uniqueCount - addedCount;
 
     // Audit log
     await query(

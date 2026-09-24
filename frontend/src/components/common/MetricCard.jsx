@@ -55,6 +55,7 @@ export function MetricCard({
   badge,
   trend,
   sparkline,
+  footer,
   loading = false,
 }) {
   const tone = TONES[color] || TONES.white;
@@ -76,14 +77,16 @@ export function MetricCard({
 
   return (
     <div className="card card-hover relative flex flex-col overflow-hidden p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
           {Icon && (
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tone.icon}`}>
-              <Icon className="h-[18px] w-[18px]" />
+            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${tone.icon}`}>
+              <Icon className="h-[17px] w-[17px]" />
             </div>
           )}
-          <span className="truncate text-[13px] font-medium text-zinc-400">{title}</span>
+          <span className="min-h-[2.25rem] text-[12.5px] font-medium leading-snug text-zinc-400 line-clamp-2">
+            {title}
+          </span>
         </div>
 
         {badge && (
@@ -114,8 +117,8 @@ export function MetricCard({
         )}
       </div>
 
-      {hasSpark && (
-        <div className="pointer-events-none mt-4 -mx-5 -mb-5 h-12">
+      {hasSpark ? (
+        <div className="pointer-events-none mt-auto -mx-5 -mb-5 h-12 pt-4">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={sparkData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
               <defs>
@@ -135,7 +138,11 @@ export function MetricCard({
             </AreaChart>
           </ResponsiveContainer>
         </div>
-      )}
+      ) : footer ? (
+        <div className="mt-auto -mx-5 -mb-5 flex h-12 items-center border-t border-surface-border px-5">
+          {footer}
+        </div>
+      ) : null}
     </div>
   );
 }

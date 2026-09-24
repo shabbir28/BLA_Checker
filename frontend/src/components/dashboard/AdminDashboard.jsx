@@ -10,6 +10,7 @@ import {
   Database,
   FileCheck2,
   ShieldCheck,
+  ShieldAlert,
   RefreshCw,
   Download,
   ArrowUpRight,
@@ -177,6 +178,47 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
   const rangeLabel = dateRange.id === 'today' ? 'today' : dateRange.label.toLowerCase();
   const hasDncTimeline = timeline.some((t) => Number(t.local_dnc_leads) > 0 || Number(t.bla_dnc_leads) > 0);
 
+  // Source composition for the "Total DNC in Database" KPI footer
+  const masterDncFooter = useMemo(() => {
+    const srcCount = (name) => Number(sourceBreakdown.find((s) => s.source === name)?.count || 0);
+    const blaSynced = srcCount('BLA_SYNC');
+    const uploaded = srcCount('MANUAL_UPLOAD') + srcCount('INITIAL_SEED');
+    const manual = srcCount('MANUAL_ENTRY');
+    const total = Number(kpis.totalMasterDnc) || 0;
+    const other = Math.max(0, total - blaSynced - uploaded - manual);
+    const segs = [
+      { label: 'BLA', value: blaSynced, color: '#10b981' },
+      { label: 'Uploaded', value: uploaded, color: '#06b6d4' },
+      { label: 'Manual', value: manual, color: '#8b5cf6' },
+      { label: 'Other', value: other, color: '#3f3f46' },
+    ].filter((s) => s.value > 0);
+    const denom = total || 1;
+
+    if (segs.length === 0) {
+      return <span className="text-[11px] text-zinc-600">No sources yet</span>;
+    }
+
+    const top = segs.filter((s) => s.label !== 'Other').slice(0, 2);
+
+    return (
+      <div className="w-full">
+        <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-surface-raised">
+          {segs.map((s) => (
+            <div key={s.label} style={{ width: `${(s.value / denom) * 100}%`, backgroundColor: s.color }} />
+          ))}
+        </div>
+        <div className="mt-1.5 flex items-center gap-3 text-[10px] text-zinc-500">
+          {top.map((s) => (
+            <span key={s.label} className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.color }} />
+              {s.label} {formatCompact(s.value)}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }, [sourceBreakdown, kpis.totalMasterDnc]);
+
   if (loading) return <LoadingSpinner message="Loading dashboard…" size="lg" />;
 
   if (error) {
@@ -219,18 +261,18 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
       </div>
 
       {/* ---------- KPIs ---------- */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <MetricCard
-          title={dateRange.id === 'today' ? 'BLA Checks Today' : `BLA Checks (${dateRange.label})`}
+          title="BLA API Checks"
           value={formatCompact(kpis.totalBlaChecked)}
-          subtext="Verified via Blacklist Alliance API"
+          subtext="Verified via Blacklist Alliance"
           icon={Zap}
           color="amber"
-          badge="Live BLA"
+          badge="Live"
           sparkline={sparks.bla}
         />
         <MetricCard
-          title="Total Leads Checked"
+          title="Leads Checked"
           value={formatCompact(kpis.totalLeadsChecked)}
           subtext={`${formatNumber(kpis.completedSessions)} completed files`}
           icon={FileCheck2}
@@ -238,22 +280,29 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
           sparkline={sparks.total}
         />
         <MetricCard
-          title="Clean Numbers Found"
+          title="Clean Numbers"
           value={formatCompact(kpis.totalCleanLeads)}
           subtext={`${(kpis.cleanRatePercent || 0).toFixed(1)}% clean rate`}
           icon={ShieldCheck}
           color="emerald"
-          badge="Verified Safe"
+          badge="Safe"
           sparkline={sparks.clean}
         />
         <MetricCard
-          title="DNC in Database"
+          title="DNC Intercepted"
           value={formatCompact(kpis.totalLocalDnc)}
-          subtext="Skipped before BLA API"
-          icon={Database}
+          subtext="Matched locally, skipped BLA"
+          icon={ShieldAlert}
           color="cyan"
-          badge="Intercepted"
           sparkline={sparks.local}
+        />
+        <MetricCard
+          title="Total DNC in Database"
+          value={formatNumber(kpis.totalMasterDnc)}
+          subtext="Total suppressed numbers"
+          icon={Database}
+          color="violet"
+          footer={masterDncFooter}
         />
       </div>
 

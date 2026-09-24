@@ -398,13 +398,27 @@ export function MasterDncManager() {
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-2 font-medium text-zinc-200">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                  {uploadPhase === 'processing' ? 'Importing and de-duplicating…' : 'Uploading file…'}
+                  {uploadPhase === 'processing' ? 'Processing on server…' : 'Uploading file…'}
                 </span>
-                <span className="font-mono font-semibold text-emerald-300">{uploadProgress}%</span>
+                {uploadPhase !== 'processing' && (
+                  <span className="font-mono font-semibold text-emerald-300">{uploadProgress}%</span>
+                )}
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-page">
-                <div className="h-full rounded-full bg-emerald-500 transition-all duration-200" style={{ width: `${Math.max(4, uploadProgress)}%` }} />
-              </div>
+
+              {uploadPhase === 'processing' ? (
+                <>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-page">
+                    <div className="h-full w-2/5 rounded-full bg-emerald-500 animate-[shimmer_1.4s_ease-in-out_infinite]" style={{ backgroundImage: 'linear-gradient(90deg, transparent, #10b981, transparent)', backgroundSize: '200% 100%' }} />
+                  </div>
+                  <p className="text-[11px] text-zinc-500">
+                    File received. Normalizing, de-duplicating and importing numbers — large lists can take a minute.
+                  </p>
+                </>
+              ) : (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-page">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all duration-200" style={{ width: `${Math.max(4, uploadProgress)}%` }} />
+                </div>
+              )}
             </div>
           )}
 

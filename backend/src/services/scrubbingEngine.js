@@ -4,6 +4,7 @@ import xlsx from 'xlsx';
 import csvParser from 'csv-parser';
 import { query, pool } from '../config/db.js';
 import { normalizePhone, detectPhoneColumn } from '../utils/phoneNormalizer.js';
+import { copyIntoTable } from '../utils/bulkCopy.js';
 import blaService from './blaService.js';
 
 class ScrubbingEngine {
@@ -313,27 +314,27 @@ class ScrubbingEngine {
         [sessionId]
       );
 
-      console.log(`[ENGINE] Bulk inserting ${allRecords.length} session records via UNNEST...`);
-      const recordChunkSize = 5000;
-      for (let i = 0; i < allRecords.length; i += recordChunkSize) {
-        const chunk = allRecords.slice(i, i + recordChunkSize);
-
-        const sIds = new Array(chunk.length).fill(sessionId);
-        const rawPhones = chunk.map((r) => r.raw_phone || '');
-        const normPhones = chunk.map((r) => r.normalized_phone || null);
-        const origData = chunk.map((r) => JSON.stringify(r.original_row_data || {}));
-        const statuses = chunk.map((r) => r.status);
-        const reasons = chunk.map((r) => r.reason || null);
-        const blaRaws = chunk.map((r) => (r.bla_response_raw ? JSON.stringify(r.bla_response_raw) : null));
-
-        await query(
-          `INSERT INTO session_records
-           (session_id, raw_phone, normalized_phone, original_row_data, status, reason, bla_response_raw, created_at)
-           SELECT s_id, raw_p, norm_p, orig_d::jsonb, stat, reas, bla_r::jsonb, NOW()
-           FROM UNNEST($1::uuid[], $2::varchar[], $3::varchar[], $4::text[], $5::varchar[], $6::text[], $7::text[])
-             AS t(s_id, raw_p, norm_p, orig_d, stat, reas, bla_r);`,
-          [sIds, rawPhones, normPhones, origData, statuses, reasons, blaRaws]
+      console.log(`[ENGINE] Bulk COPY of ${allRecords.length} session records...`);
+      const recordClient = await pool.connect();
+      try {
+        await copyIntoTable(
+          recordClient,
+          `COPY session_records
+             (session_id, raw_phone, normalized_phone, original_row_data, status, reason, bla_response_raw)
+           FROM STDIN WITH (FORMAT csv)`,
+          allRecords,
+          (r) => [
+            sessionId,
+            r.raw_phone ?? '',
+            r.normalized_phone || null,
+            JSON.stringify(r.original_row_data || {}),
+            r.status,
+            r.reason || null,
+            r.bla_response_raw ? JSON.stringify(r.bla_response_raw) : null,
+          ]
         );
+      } finally {
+        recordClient.release();
       }
 
       // 8. Mark Session Completed
