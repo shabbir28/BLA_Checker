@@ -30,6 +30,10 @@ sudo -u postgres psql -d bla_checker -c "GRANT ALL ON SCHEMA public TO bla_user;
 
 echo ">>> [4/6] Installing Dependencies and Running Migrations..."
 cd /var/www/bla-checker/backend
+if [ ! -f .env ]; then
+  echo "Creating .env from .env.example..."
+  cp .env.example .env
+fi
 npm install --production=false
 npm run setup
 
