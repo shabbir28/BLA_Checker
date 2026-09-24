@@ -16,7 +16,15 @@ import UserManagement from './components/admin/UserManagement';
 
 function MainApp() {
   const { user, loading, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState(() => (isAdmin ? 'dashboard' : 'leads'));
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const stored = localStorage.getItem('bla_user');
+      const u = stored ? JSON.parse(stored) : null;
+      return u?.role === 'user' ? 'leads' : 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
 
