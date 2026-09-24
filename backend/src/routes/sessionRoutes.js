@@ -32,7 +32,9 @@ const upload = multer({
     if (['.csv', '.xlsx', '.xls', '.txt'].includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only CSV, XLSX, XLS, and TXT lead files are supported.'));
+      const err = new Error('Only CSV, XLSX, XLS, and TXT lead files are supported.');
+      err.status = 400;
+      cb(err);
     }
   },
 });

@@ -7,28 +7,48 @@ import {
   Database,
   Users,
   ShieldCheck,
-  ChevronRight,
   X,
   LogOut,
 } from 'lucide-react';
 
+const MAIN_NAV = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, adminOnly: true },
+  { id: 'leads', label: 'Upload Files', icon: UploadCloud },
+  { id: 'sessions', label: 'Sessions', icon: Layers, adminOnly: true },
+  { id: 'dnc', label: 'DNC Upload', icon: Database, adminOnly: true },
+];
+
+const ADMIN_NAV = [{ id: 'users', label: 'Users', icon: Users }];
+
+function NavItem({ item, active, onSelect }) {
+  const Icon = item.icon;
+  return (
+    <button
+      onClick={() => onSelect(item.id)}
+      aria-current={active ? 'page' : undefined}
+      className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+        active
+          ? 'bg-surface-raised text-white'
+          : 'text-zinc-400 hover:bg-surface-raised/60 hover:text-zinc-100'
+      }`}
+    >
+      {active && <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-400" />}
+      <Icon className={`h-[18px] w-[18px] shrink-0 ${active ? 'text-emerald-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+      <span className="truncate">{item.label}</span>
+    </button>
+  );
+}
+
 export function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
   const { user, logout, isAdmin } = useAuth();
 
-  const primaryNav = isAdmin
-    ? [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'leads', label: 'Upload Files', icon: UploadCloud },
-        { id: 'sessions', label: 'Sessions', icon: Layers },
-        { id: 'dnc', label: 'DNC Upload', icon: Database },
-      ]
-    : [
-        { id: 'leads', label: 'Upload Files', icon: UploadCloud },
-      ];
-
-  const adminNav = [
-    { id: 'users', label: 'Users', icon: Users },
-  ];
+  const primaryNav = MAIN_NAV.filter((n) => !n.adminOnly || isAdmin);
+  const initials = (user?.name || user?.email || 'U')
+    .split(' ')
+    .map((p) => p[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
 
   const handleSelect = (id) => {
     setActiveTab(id);
@@ -37,127 +57,73 @@ export function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
 
   return (
     <>
-      {/* Mobile Backdrop */}
       {isOpen && (
-        <div
-          onClick={onClose}
-          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden"
-        />
+        <div onClick={onClose} className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden" aria-hidden="true" />
       )}
 
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-40 w-64 border-r border-zinc-800 bg-black flex flex-col transition-transform duration-300 md:translate-x-0 ${
+        className={`fixed bottom-0 left-0 top-0 z-40 flex w-64 flex-col border-r border-surface-border bg-surface-page transition-transform duration-300 md:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Brand Header */}
-        <div className="flex items-center justify-between h-16 px-6 border-b border-zinc-800">
+        {/* Brand */}
+        <div className="flex h-16 items-center justify-between border-b border-surface-border px-5">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 text-emerald-400">
-              <ShieldCheck className="w-5 h-5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-black shadow-md shadow-white/10">
+              <ShieldCheck className="h-5 w-5" strokeWidth={2.4} />
             </div>
-            <div>
-              <span className="font-extrabold text-base tracking-tight text-white block">
-                BLA <span className="text-zinc-400">CHECKER</span>
-              </span>
-              <span className="text-[10px] text-zinc-500 font-mono">DNC Compliance</span>
+            <div className="leading-tight">
+              <span className="block text-[15px] font-bold tracking-tight text-white">BLA Checker</span>
+              <span className="block text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-500">DNC Compliance</span>
             </div>
           </div>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-zinc-400 rounded-lg md:hidden hover:text-white hover:bg-zinc-900"
-          >
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="btn-icon md:hidden" aria-label="Close menu">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Navigation Items */}
-        <div className="flex-1 px-3 py-6 space-y-6 overflow-y-auto">
-          {/* Main Section */}
+        {/* Navigation */}
+        <nav className="flex-1 space-y-7 overflow-y-auto px-3 py-6">
           <div>
-            <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-2 font-mono">
-              Main Menu
-            </span>
+            <p className="eyebrow mb-2 px-3">Menu</p>
             <div className="space-y-1">
-              {primaryNav.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleSelect(item.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs md:text-sm font-medium transition cursor-pointer ${
-                      isActive
-                        ? 'bg-zinc-900 text-white border border-zinc-700 font-semibold'
-                        : 'text-zinc-400 hover:text-white hover:bg-zinc-950'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {isActive && <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />}
-                  </button>
-                );
-              })}
+              {primaryNav.map((item) => (
+                <NavItem key={item.id} item={item} active={activeTab === item.id} onSelect={handleSelect} />
+              ))}
             </div>
           </div>
 
-          {/* Admin Section */}
           {isAdmin && (
             <div>
-              <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-2 font-mono">
-                Admin Menu
-              </span>
+              <p className="eyebrow mb-2 px-3">Administration</p>
               <div className="space-y-1">
-                {adminNav.map((item) => {
-                  const Icon = item.icon;
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleSelect(item.id)}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs md:text-sm font-medium transition cursor-pointer ${
-                        isActive
-                          ? 'bg-zinc-900 text-white border border-zinc-700 font-semibold'
-                          : 'text-zinc-400 hover:text-white hover:bg-zinc-950'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-zinc-400'}`} />
-                        <span>{item.label}</span>
-                      </div>
-                      {isActive && <ChevronRight className="w-3.5 h-3.5 text-zinc-400" />}
-                    </button>
-                  );
-                })}
+                {ADMIN_NAV.map((item) => (
+                  <NavItem key={item.id} item={item} active={activeTab === item.id} onSelect={handleSelect} />
+                ))}
               </div>
             </div>
           )}
-        </div>
+        </nav>
 
-        {/* Bottom Section: User Info & Logout */}
-        <div className="p-3 mt-auto border-t border-zinc-800/80 bg-black">
-          <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950 border border-zinc-800/70 mb-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 shrink-0 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white text-xs font-bold">
-                {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-zinc-200 truncate">{user?.name || user?.email}</p>
-                <p className="text-[10px] text-zinc-500 capitalize">{user?.role || 'User'}</p>
-              </div>
+        {/* User */}
+        <div className="border-t border-surface-border p-3">
+          <div className="flex items-center gap-3 rounded-xl border border-surface-border bg-surface-card p-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-900 font-semibold text-xs text-white ring-1 ring-white/10">
+              {initials}
             </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-zinc-100">{user?.name || user?.email}</p>
+              <p className="truncate text-[11px] capitalize text-zinc-500">{user?.role || 'user'}</p>
+            </div>
+            <button
+              onClick={logout}
+              title="Sign out"
+              aria-label="Sign out"
+              className="shrink-0 rounded-lg p-2 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
-
-          <button
-            onClick={logout}
-            className="w-full flex items-center justify-center gap-2.5 px-3 py-2.5 rounded-xl text-xs md:text-sm font-medium text-zinc-300 hover:text-red-400 hover:bg-red-500/10 border border-zinc-800 hover:border-red-500/30 transition cursor-pointer"
-          >
-            <LogOut className="w-4 h-4 text-zinc-400" />
-            <span>Logout</span>
-          </button>
         </div>
       </aside>
     </>

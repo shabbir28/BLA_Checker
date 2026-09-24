@@ -1,53 +1,48 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Menu, User as UserIcon } from 'lucide-react';
+import { Menu, LogOut } from 'lucide-react';
+
+const PAGES = {
+  dashboard: { title: 'Dashboard', subtitle: 'Analytics and recent activity' },
+  leads: { title: 'Upload Files', subtitle: 'Upload a file and scrub it against DNC lists' },
+  sessions: { title: 'Sessions', subtitle: 'Every uploaded file and its results' },
+  dnc: { title: 'DNC Upload', subtitle: 'Your internal Do Not Call suppression list' },
+  users: { title: 'Users', subtitle: 'Accounts and roles' },
+};
 
 export function Navbar({ onToggleSidebar, activeTab }) {
   const { user, logout } = useAuth();
-
-  const tabTitles = {
-    dashboard: 'Dashboard',
-    leads: 'Upload Files',
-    sessions: 'Sessions',
-    dnc: 'DNC Upload',
-    users: 'Users',
-  };
+  const page = PAGES[activeTab] || PAGES.dashboard;
+  const initial = (user?.name || user?.email || 'U').charAt(0).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 flex items-center justify-between h-16 px-4 md:px-8 border-b border-zinc-800 bg-black/90 backdrop-blur-md">
-      {/* Left: Mobile Toggle & Page Title */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={onToggleSidebar}
-          className="p-2 text-zinc-400 rounded-lg md:hidden hover:text-white hover:bg-zinc-900"
-        >
-          <Menu className="w-5 h-5" />
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-surface-border bg-surface-page/85 px-4 backdrop-blur-md md:px-8">
+      <div className="flex min-w-0 items-center gap-3">
+        <button onClick={onToggleSidebar} className="btn-icon md:hidden" aria-label="Open menu">
+          <Menu className="h-4 w-4" />
         </button>
-
-        <h1 className="text-base md:text-lg font-bold text-white tracking-tight">
-          {tabTitles[activeTab] || 'Dashboard'}
-        </h1>
+        <div className="min-w-0 leading-tight">
+          <h1 className="truncate text-[15px] font-semibold text-white md:text-base">{page.title}</h1>
+          <p className="hidden truncate text-xs text-zinc-500 sm:block">{page.subtitle}</p>
+        </div>
       </div>
 
-      {/* Right Actions */}
-      <div className="flex items-center gap-3 md:gap-4">
-        {/* User Profile */}
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white text-xs font-bold">
-            {user?.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-4 h-4" />}
+      <div className="flex items-center gap-2 md:gap-3">
+        <div className="flex items-center gap-2 rounded-xl border border-surface-border bg-surface-card py-1 pl-1 pr-1.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-900 text-xs font-semibold text-white ring-1 ring-white/10">
+            {initial}
           </div>
-
-          <div className="hidden sm:flex flex-col items-start leading-none">
-            <span className="text-xs font-semibold text-zinc-200">{user?.name || user?.email}</span>
-            <span className="text-[10px] text-zinc-500 capitalize mt-0.5">{user?.role}</span>
+          <div className="hidden leading-none md:block">
+            <p className="max-w-[140px] truncate text-xs font-medium text-zinc-100">{user?.name || user?.email}</p>
+            <p className="mt-0.5 text-[10px] capitalize text-zinc-500">{user?.role}</p>
           </div>
-
           <button
             onClick={logout}
-            title="Sign Out"
-            className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-zinc-900 rounded-lg transition ml-1 cursor-pointer"
+            title="Sign out"
+            aria-label="Sign out"
+            className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
       </div>

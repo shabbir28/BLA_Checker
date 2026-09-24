@@ -131,10 +131,12 @@ export function DateRangeSelector({ value, onChange }) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-zinc-950/90 hover:bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition cursor-pointer text-xs sm:text-sm font-semibold text-white shadow-sm"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        className="btn-secondary text-xs sm:text-sm"
       >
         <Calendar className="w-4 h-4 text-amber-400" />
-        <span className="text-zinc-200">{currentLabel}</span>
+        <span className="text-zinc-100">{currentLabel}</span>
         {isOpen ? (
           <ChevronUp className="w-4 h-4 text-zinc-400 ml-0.5" />
         ) : (
@@ -144,7 +146,7 @@ export function DateRangeSelector({ value, onChange }) {
 
       {/* Dropdown Menu Matching Image 2 */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-zinc-950 border border-zinc-800 shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 mt-2 w-80 card p-2 z-50 shadow-2xl animate-fade-in-up" role="menu">
           {!isCustomMode ? (
             <div className="space-y-1">
               {options.map((opt) => {
@@ -156,8 +158,8 @@ export function DateRangeSelector({ value, onChange }) {
                     onClick={() => handleSelect(opt)}
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-left transition cursor-pointer ${
                       isSelected
-                        ? 'bg-amber-500/15 text-amber-400 font-bold border border-amber-500/20'
-                        : 'text-zinc-300 hover:text-white hover:bg-zinc-900/80 font-medium'
+                        ? 'bg-amber-500/10 text-amber-300 font-semibold ring-1 ring-amber-500/30'
+                        : 'text-zinc-300 hover:text-white hover:bg-surface-raised font-medium'
                     }`}
                   >
                     <span className="text-xs sm:text-sm">{opt.label}</span>
@@ -199,7 +201,7 @@ export function DateRangeSelector({ value, onChange }) {
                   value={customStart}
                   onChange={(e) => setCustomStart(e.target.value)}
                   required
-                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-amber-400"
+                  className="input py-2 text-xs"
                 />
               </div>
 
@@ -210,7 +212,7 @@ export function DateRangeSelector({ value, onChange }) {
                   value={customEnd}
                   onChange={(e) => setCustomEnd(e.target.value)}
                   required
-                  className="w-full px-3 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-amber-400"
+                  className="input py-2 text-xs"
                 />
               </div>
 

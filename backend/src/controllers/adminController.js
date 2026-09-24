@@ -36,6 +36,7 @@ export async function getDashboardAnalytics(req, res) {
         COALESCE(SUM(bla_dnc_count), 0) as total_bla_dnc,
         COALESCE(SUM(clean_count + bla_dnc_count), 0) as total_bla_checked,
         COALESCE(SUM(invalid_numbers), 0) as total_invalid,
+        COALESCE(SUM(duplicate_numbers), 0) as total_duplicates,
         COALESCE(SUM(api_calls_saved), 0) as total_api_saved,
         COUNT(CASE WHEN status IN ('QUEUED', 'PROCESSING') THEN 1 END) as active_sessions,
         COUNT(CASE WHEN status = 'COMPLETED' THEN 1 END) as completed_sessions
@@ -83,6 +84,10 @@ export async function getDashboardAnalytics(req, res) {
         COALESCE(SUM(clean_count), 0) as clean_leads,
         COALESCE(SUM(clean_count + bla_dnc_count), 0) as bla_checked_leads,
         COALESCE(SUM(local_dnc_count + bla_dnc_count), 0) as dnc_leads,
+        COALESCE(SUM(local_dnc_count), 0) as local_dnc_leads,
+        COALESCE(SUM(bla_dnc_count), 0) as bla_dnc_leads,
+        COALESCE(SUM(invalid_numbers), 0) as invalid_leads,
+        COALESCE(SUM(duplicate_numbers), 0) as duplicate_leads,
         COALESCE(SUM(api_calls_saved), 0) as api_saved
       FROM checking_sessions
       ${timelineWhere}
@@ -120,6 +125,9 @@ export async function getDashboardAnalytics(req, res) {
         totalLocalDnc,
         totalBlaDnc,
         totalBlaChecked,
+        totalInvalid: parseInt(agg.total_invalid, 10),
+        totalDuplicates: parseInt(agg.total_duplicates, 10),
+        totalSessions: parseInt(agg.total_sessions, 10),
         todayBlaChecked: parseInt(todayAgg.today_bla_checked, 10),
         todayTotalLeads: parseInt(todayAgg.today_total_leads, 10),
         todayClean: parseInt(todayAgg.today_clean, 10),

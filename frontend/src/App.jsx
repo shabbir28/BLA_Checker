@@ -7,7 +7,6 @@ import AuthPage from './pages/AuthPage';
 
 // Views
 import AdminDashboard from './components/dashboard/AdminDashboard';
-import UserDashboard from './components/dashboard/UserDashboard';
 import LeadCheckerStudio from './components/leads/LeadCheckerStudio';
 import SessionDetails from './components/leads/SessionDetails';
 import MasterDncManager from './components/dnc/MasterDncManager';
@@ -37,8 +36,8 @@ function MainApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
-        <LoadingSpinner message="Loading BLA Checker..." size="lg" />
+      <div className="min-h-screen bg-surface-page text-white flex items-center justify-center">
+        <LoadingSpinner message="Loading BLA Checker…" size="lg" />
       </div>
     );
   }
@@ -58,7 +57,7 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col md:flex-row">
+    <div className="min-h-screen bg-surface-page text-white flex flex-col md:flex-row">
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
@@ -78,7 +77,7 @@ function MainApp() {
           onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
         />
 
-        <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
+        <main className="flex-1 w-full max-w-[1400px] mx-auto px-4 py-6 md:px-8 md:py-8">
           {activeTab === 'dashboard' && isAdmin && (
             <AdminDashboard
               onSelectSession={handleSelectSession}

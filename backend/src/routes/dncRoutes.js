@@ -30,7 +30,9 @@ const upload = multer({
     if (['.csv', '.xlsx', '.xls', '.txt'].includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only CSV, XLSX, XLS, and TXT files are supported.'));
+      const err = new Error('Only CSV, XLSX, XLS, and TXT files are supported.');
+      err.status = 400;
+      cb(err);
     }
   },
 });
@@ -41,8 +43,8 @@ const router = Router();
 router.get('/stats', requireAuth, getDncStats);
 router.get('/list', requireAuth, listMasterDnc);
 router.get('/export', requireAuth, exportMasterDnc);
-router.post('/single', requireAuth, addSingleDnc);
-router.post('/upload', requireAuth, upload.single('file'), uploadMasterDnc);
+router.post('/single', requireAuth, requireAdmin, addSingleDnc);
+router.post('/upload', requireAuth, requireAdmin, upload.single('file'), uploadMasterDnc);
 router.delete('/:id', requireAuth, requireAdmin, deleteDnc);
 
 export default router;

@@ -2,49 +2,59 @@ import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-xl' }) {
+const SIZES = {
+  sm: 'max-w-md',
+  md: 'max-w-xl',
+  lg: 'max-w-3xl',
+};
+
+export function Modal({ isOpen, onClose, title, description, children, size = 'md', maxWidth }) {
   useEffect(() => {
+    if (!isOpen) return undefined;
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isOpen) onClose();
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [isOpen, onClose]);
+
+  const widthCls = maxWidth || SIZES[size] || SIZES.md;
 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
-          {/* Backdrop */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4" role="dialog" aria-modal="true" aria-label={title}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
           />
 
-          {/* Modal Container */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+            initial={{ opacity: 0, scale: 0.97, y: 8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 10 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className={`relative w-full ${maxWidth} bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden z-10`}
+            exit={{ opacity: 0, scale: 0.97, y: 8 }}
+            transition={{ type: 'spring', damping: 26, stiffness: 380 }}
+            className={`relative z-10 w-full ${widthCls} card overflow-hidden shadow-2xl`}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-              <h3 className="text-base font-bold text-white">{title}</h3>
-              <button
-                onClick={onClose}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-900 transition"
-              >
-                <X className="w-5 h-5" />
+            <div className="flex items-start justify-between gap-4 border-b border-surface-border px-6 py-4">
+              <div className="min-w-0">
+                <h3 className="text-base font-semibold text-white">{title}</h3>
+                {description && <p className="mt-0.5 text-xs text-zinc-500">{description}</p>}
+              </div>
+              <button onClick={onClose} className="btn-icon -mr-1 -mt-0.5" aria-label="Close">
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Body */}
-            <div className="p-6 max-h-[80vh] overflow-y-auto">{children}</div>
+            <div className="max-h-[78vh] overflow-y-auto px-6 py-5">{children}</div>
           </motion.div>
         </div>
       )}

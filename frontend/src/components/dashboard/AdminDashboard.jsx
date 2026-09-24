@@ -1,22 +1,28 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { adminApi, sessionApi } from '../../services/api';
 import MetricCard from '../common/MetricCard';
 import StatusBadge from '../common/StatusBadge';
 import LoadingSpinner from '../common/LoadingSpinner';
 import DateRangeSelector from '../common/DateRangeSelector';
+import ChartTooltip from '../common/ChartTooltip';
+import { formatNumber, formatCompact, formatDateShort, formatDateTime, safeRate } from '../../utils/format';
 import {
   Database,
-  FileCheck,
+  FileCheck2,
   ShieldCheck,
   RefreshCw,
   Download,
-  ExternalLink,
+  ArrowUpRight,
   AlertTriangle,
   Zap,
+  UploadCloud,
+  Inbox,
 } from 'lucide-react';
 import {
   AreaChart,
   Area,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -25,379 +31,537 @@ import {
   PieChart,
   Pie,
   Cell,
-  Legend,
 } from 'recharts';
+
+const COLORS = {
+  total: '#e4e4e7',
+  clean: '#10b981',
+  local: '#f59e0b',
+  bla: '#ef4444',
+  invalid: '#71717a',
+  grid: '#1f1f24',
+  axis: '#52525b',
+};
+
+const SOURCE_COLORS = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#a1a1aa'];
+
+function todayRange() {
+  const now = new Date();
+  return {
+    id: 'today',
+    label: 'Today',
+    startDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString(),
+    endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString(),
+  };
+}
+
+function sourceLabel(source) {
+  const map = {
+    BLA_SYNC: 'BLA synced',
+    MANUAL_UPLOAD: 'Uploaded',
+    MANUAL_ENTRY: 'Manual entry',
+    INITIAL_SEED: 'Seeded',
+  };
+  return map[source] || source?.replace(/^Upload_/, '') || 'Unknown';
+}
+
+function ChartCard({ title, subtitle, action, children, className = '' }) {
+  return (
+    <section className={`card flex flex-col p-5 ${className}`}>
+      <header className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="section-title">{title}</h3>
+          {subtitle && <p className="section-subtitle">{subtitle}</p>}
+        </div>
+        {action}
+      </header>
+      <div className="flex-1 min-h-0">{children}</div>
+    </section>
+  );
+}
+
+function ChartEmpty({ message }) {
+  return (
+    <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 text-center text-xs text-zinc-500">
+      <Inbox className="h-6 w-6 text-zinc-600" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function LegendDot({ color, label, value, pct }) {
+  return (
+    <li className="flex items-center justify-between gap-3 text-xs">
+      <span className="flex items-center gap-2 text-zinc-300">
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+        {label}
+      </span>
+      <span className="flex items-baseline gap-2">
+        <span className="font-mono font-semibold text-white">{formatNumber(value)}</span>
+        <span className="w-11 text-right font-mono text-zinc-500">{pct.toFixed(1)}%</span>
+      </span>
+    </li>
+  );
+}
 
 export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState(todayRange);
 
-  // Initialize with Today matching Image 2
-  const [dateRange, setDateRange] = useState(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-    return {
-      id: 'today',
-      label: 'Today',
-      startDate: start,
-      endDate: end,
-    };
-  });
-
-  const fetchAnalytics = async (selectedRange = dateRange) => {
+  const fetchAnalytics = async (selectedRange = dateRange, silent = false) => {
     try {
-      setRefreshing(true);
+      if (!silent) setRefreshing(true);
       const params = {};
       if (selectedRange?.startDate) params.startDate = selectedRange.startDate;
       if (selectedRange?.endDate) params.endDate = selectedRange.endDate;
-
       const res = await adminApi.getAnalytics(params);
       setData(res.data);
       setError(null);
     } catch (err) {
       console.error('[ADMIN DASHBOARD] Fetch analytics error:', err);
-      setError('Could not load analytics.');
+      setError('Could not load analytics. Check that the API is running.');
     } finally {
       setLoading(false);
-      setRefreshing(false);
+      if (!silent) setRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchAnalytics(dateRange);
-    const interval = setInterval(() => fetchAnalytics(dateRange), 30000);
+    const interval = setInterval(() => fetchAnalytics(dateRange, true), 30000);
     return () => clearInterval(interval);
   }, [dateRange]);
 
-  const handleDateRangeChange = (newRange) => {
-    setDateRange(newRange);
-    fetchAnalytics(newRange);
-  };
+  const kpis = useMemo(() => data?.kpis || {}, [data]);
+  const timeline = useMemo(() => data?.timeline || [], [data]);
+  const recentSessions = data?.recentSessions || [];
+  const sourceBreakdown = useMemo(() => data?.dncSourceBreakdown || [], [data]);
 
-  if (loading) return <LoadingSpinner message="Loading dashboard..." size="lg" />;
+  const sparks = useMemo(
+    () => ({
+      total: timeline.map((t) => Number(t.total_leads) || 0),
+      clean: timeline.map((t) => Number(t.clean_leads) || 0),
+      local: timeline.map((t) => Number(t.local_dnc_leads) || 0),
+      bla: timeline.map((t) => Number(t.bla_checked_leads) || 0),
+    }),
+    [timeline]
+  );
+
+  const breakdown = useMemo(() => {
+    const items = [
+      { key: 'clean', name: 'Clean', value: kpis.totalCleanLeads || 0, color: COLORS.clean },
+      { key: 'local', name: 'Already in DNC', value: kpis.totalLocalDnc || 0, color: COLORS.local },
+      { key: 'bla', name: 'DNC from BLA', value: kpis.totalBlaDnc || 0, color: COLORS.bla },
+      { key: 'invalid', name: 'Invalid', value: kpis.totalInvalid || 0, color: COLORS.invalid },
+    ];
+    const total = items.reduce((a, b) => a + b.value, 0);
+    return { items, total, chart: items.filter((i) => i.value > 0) };
+  }, [kpis]);
+
+  const sourceData = useMemo(
+    () =>
+      sourceBreakdown
+        .map((s, i) => ({
+          name: sourceLabel(s.source),
+          value: Number(s.count) || 0,
+          color: SOURCE_COLORS[i % SOURCE_COLORS.length],
+        }))
+        .filter((s) => s.value > 0)
+        .slice(0, 6),
+    [sourceBreakdown]
+  );
+
+  const rangeLabel = dateRange.id === 'today' ? 'today' : dateRange.label.toLowerCase();
+  const hasDncTimeline = timeline.some((t) => Number(t.local_dnc_leads) > 0 || Number(t.bla_dnc_leads) > 0);
+
+  if (loading) return <LoadingSpinner message="Loading dashboard…" size="lg" />;
+
   if (error) {
     return (
-      <div className="p-8 text-center bg-zinc-950 rounded-2xl border border-red-900/50">
-        <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
-        <p className="text-red-300 text-sm mb-4">{error}</p>
-        <button
-          onClick={() => fetchAnalytics(dateRange)}
-          className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl text-xs font-semibold"
-        >
-          Retry
+      <div className="card p-10 text-center">
+        <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-red-400" />
+        <p className="mb-5 text-sm text-red-200">{error}</p>
+        <button onClick={() => fetchAnalytics(dateRange)} className="btn-secondary">
+          <RefreshCw className="h-4 w-4" /> Retry
         </button>
       </div>
     );
   }
 
-  const kpis = data?.kpis || {};
-  const timeline = data?.timeline || [];
-  const recentSessions = data?.recentSessions || [];
-
-  const pieData = [
-    { name: 'Clean Numbers', value: kpis.totalCleanLeads || 0, color: '#10b981' },
-    { name: 'DNC Numbers', value: kpis.totalDncMatched || 0, color: '#ef4444' },
-  ].filter((item) => item.value > 0);
-
-  const displayPieData =
-    pieData.length > 0
-      ? pieData
-      : [
-          { name: 'Clean Numbers', value: 80, color: '#10b981' },
-          { name: 'DNC Numbers', value: 20, color: '#ef4444' },
-        ];
-
   return (
-    <div className="space-y-6">
-      {/* Top Banner with Date Selector & Refresh (Matching Image 2) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
+    <div className="space-y-6 animate-fade-in">
+      {/* ---------- Header ---------- */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">Admin Dashboard</h2>
-          <p className="text-xs md:text-sm text-zinc-400 mt-1">
-            Real-time analytics for BLA compliance verification, lead files, and DNC suppression.
+          <span className="eyebrow">Overview</span>
+          <h2 className="page-title mt-1">Compliance Dashboard</h2>
+          <p className="page-subtitle">
+            Lead verification, DNC suppression and Blacklist Alliance usage for{' '}
+            <span className="text-zinc-200 font-medium">{dateRange.label}</span>.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Custom Date Range Dropdown Selector */}
-          <DateRangeSelector value={dateRange} onChange={handleDateRangeChange} />
-
+        <div className="flex flex-wrap items-center gap-2">
+          <DateRangeSelector value={dateRange} onChange={setDateRange} />
           <button
             onClick={() => fetchAnalytics(dateRange)}
             disabled={refreshing}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition cursor-pointer"
+            className="btn-secondary"
+            title="Refresh"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* 4 Core KPI Cards with BLA Checked Count */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* KPI 1: BLA Numbers Checked for Selected Date / Today */}
+      {/* ---------- KPIs ---------- */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           title={dateRange.id === 'today' ? 'BLA Checks Today' : `BLA Checks (${dateRange.label})`}
-          value={kpis.totalBlaChecked?.toLocaleString() || '0'}
+          value={formatCompact(kpis.totalBlaChecked)}
           subtext="Verified via Blacklist Alliance API"
           icon={Zap}
           color="amber"
           badge="Live BLA"
+          sparkline={sparks.bla}
         />
-
-        {/* KPI 2: Total Leads Checked */}
         <MetricCard
           title="Total Leads Checked"
-          value={kpis.totalLeadsChecked?.toLocaleString() || '0'}
-          subtext={`${kpis.completedSessions || 0} completed files`}
-          icon={FileCheck}
+          value={formatCompact(kpis.totalLeadsChecked)}
+          subtext={`${formatNumber(kpis.completedSessions)} completed files`}
+          icon={FileCheck2}
           color="white"
+          sparkline={sparks.total}
         />
-
-        {/* KPI 3: Fresh Clean Numbers */}
         <MetricCard
           title="Clean Numbers Found"
-          value={kpis.totalCleanLeads?.toLocaleString() || '0'}
-          subtext={`${kpis.cleanRatePercent || 0}% clean rate`}
+          value={formatCompact(kpis.totalCleanLeads)}
+          subtext={`${(kpis.cleanRatePercent || 0).toFixed(1)}% clean rate`}
           icon={ShieldCheck}
           color="emerald"
           badge="Verified Safe"
+          sparkline={sparks.clean}
         />
-
-        {/* KPI 4: Already in DNC Database */}
         <MetricCard
           title="DNC in Database"
-          value={kpis.totalLocalDnc?.toLocaleString() || '0'}
+          value={formatCompact(kpis.totalLocalDnc)}
           subtext="Skipped before BLA API"
           icon={Database}
           color="cyan"
           badge="Intercepted"
+          sparkline={sparks.local}
         />
       </div>
 
-      {/* Analytics Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Trend Area Chart */}
-        <div className="lg:col-span-2 p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-bold text-white">Daily Checked Leads</h3>
-              <p className="text-xs text-zinc-400">Total numbers vs clean numbers found over time</p>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-white" />
-                <span className="text-zinc-400">Total</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                <span className="text-zinc-400">Clean</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-60 w-full">
+      {/* ---------- Charts row 1 ---------- */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+        <ChartCard
+          title="Verification volume"
+          subtitle="Numbers checked per day, split into clean and DNC"
+          className="xl:col-span-2"
+          action={
+            <ul className="hidden items-center gap-4 text-[11px] text-zinc-400 sm:flex">
+              {[
+                ['Total', COLORS.total],
+                ['Clean', COLORS.clean],
+                ['DNC', COLORS.bla],
+              ].map(([l, c]) => (
+                <li key={l} className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: c }} />
+                  {l}
+                </li>
+              ))}
+            </ul>
+          }
+        >
+          <div className="h-72">
             {timeline.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={timeline} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={timeline} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="totalColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ffffff" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#ffffff" stopOpacity={0.0} />
+                    <linearGradient id="gTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={COLORS.total} stopOpacity={0.18} />
+                      <stop offset="100%" stopColor={COLORS.total} stopOpacity={0} />
                     </linearGradient>
-                    <linearGradient id="cleanColor" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                    <linearGradient id="gClean" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={COLORS.clean} stopOpacity={0.35} />
+                      <stop offset="100%" stopColor={COLORS.clean} stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="gDnc" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={COLORS.bla} stopOpacity={0.3} />
+                      <stop offset="100%" stopColor={COLORS.bla} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1f1f23" />
-                  <XAxis dataKey="day" stroke="#52525b" fontSize={11} tickLine={false} />
-                  <YAxis stroke="#52525b" fontSize={11} tickLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    stroke={COLORS.axis}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={formatDateShort}
+                    minTickGap={24}
+                  />
+                  <YAxis
+                    stroke={COLORS.axis}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={formatCompact}
+                    width={56}
+                  />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#09090b',
-                      borderColor: '#27272a',
-                      borderRadius: '0.75rem',
-                      fontSize: '12px',
-                    }}
+                    cursor={{ stroke: '#3f3f46', strokeDasharray: '3 3' }}
+                    content={<ChartTooltip labelFormatter={formatDateShort} />}
                   />
-                  <Area
-                    type="monotone"
-                    dataKey="total_leads"
-                    stroke="#ffffff"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#totalColor)"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="clean_leads"
-                    stroke="#10b981"
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#cleanColor)"
-                  />
+                  <Area type="monotone" dataKey="total_leads" name="Total" stroke={COLORS.total} strokeWidth={1.75} fill="url(#gTotal)" />
+                  <Area type="monotone" dataKey="clean_leads" name="Clean" stroke={COLORS.clean} strokeWidth={2} fill="url(#gClean)" />
+                  <Area type="monotone" dataKey="dnc_leads" name="DNC" stroke={COLORS.bla} strokeWidth={1.75} fill="url(#gDnc)" />
                 </AreaChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-zinc-500 text-xs">
-                <span>No lead checks in the last 30 days. Upload a file to see trends.</span>
-              </div>
+              <ChartEmpty message={`No lead checks ${rangeLabel}. Upload a file to see trends.`} />
             )}
           </div>
-        </div>
+        </ChartCard>
 
-        {/* Clean vs DNC Ratio */}
-        <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800 flex flex-col justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-white">Clean vs DNC Breakdown</h3>
-            <p className="text-xs text-zinc-400">Ratio of verified clean numbers vs DNC matches</p>
-          </div>
-
-          <div className="h-52 w-full my-auto">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={displayPieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={75}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {displayPieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#09090b" strokeWidth={2} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#09090b',
-                    borderColor: '#27272a',
-                    borderRadius: '0.75rem',
-                    fontSize: '12px',
-                  }}
-                />
-                <Legend
-                  verticalAlign="bottom"
-                  height={32}
-                  formatter={(val) => <span className="text-xs text-zinc-300">{val}</span>}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-
-          <p className="text-center text-[11px] text-zinc-500 pt-2 border-t border-zinc-800">
-            DNC numbers found via BLA API are automatically saved to your DNC list.
-          </p>
-        </div>
-      </div>
-
-      {/* Recent Checks Table */}
-      <div className="p-6 rounded-2xl bg-zinc-950 border border-zinc-800">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-white">Recent File Checks</h3>
-            <p className="text-xs text-zinc-400">Recently processed lead files</p>
-          </div>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="text-[11px] uppercase tracking-wider text-zinc-400 border-b border-zinc-800 bg-zinc-900/40">
-              <tr>
-                <th className="py-3 pl-3">Session Name</th>
-                <th className="py-3">User</th>
-                <th className="py-3 text-right">Total Numbers</th>
-                <th className="py-3 text-right">Already in DNC</th>
-                <th className="py-3 text-right">DNC from BLA</th>
-                <th className="py-3 text-right">Fresh Numbers</th>
-                <th className="py-3 text-center">Status</th>
-                <th className="py-3 pr-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800/80 font-mono">
-              {recentSessions.length > 0 ? (
-                recentSessions.map((session) => (
-                  <tr key={session.id} className="hover:bg-zinc-900/50 transition">
-                    <td className="py-3 pl-3 font-sans font-medium text-white">
-                      <div>
-                        <span>{session.session_name}</span>
-                        <span className="block text-[10px] text-zinc-500 font-mono">
-                          {session.original_filename}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="py-3 font-sans text-zinc-300">
-                      {session.user_name || session.user_email || 'Admin'}
-                    </td>
-                    <td className="py-3 text-right text-white font-bold">
-                      {session.total_rows?.toLocaleString() || 0}
-                    </td>
-                    <td className="py-3 text-right">
-                      {(session.local_dnc_count || 0) > 0 ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 font-mono font-semibold text-[11px] border border-amber-800/40">
-                          {session.local_dnc_count.toLocaleString()}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-600 font-mono">0</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-right">
-                      {(session.bla_dnc_count || 0) > 0 ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-950/80 text-red-400 font-mono font-semibold text-[11px] border border-red-800/40">
-                          {session.bla_dnc_count.toLocaleString()}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-600 font-mono">0</span>
-                      )}
-                    </td>
-                    <td className="py-3 text-right">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 font-mono font-semibold text-[11px] border border-emerald-800/40">
-                        {session.clean_count?.toLocaleString() || 0}
-                      </span>
-                    </td>
-                    <td className="py-3 text-center font-sans">
-                      <StatusBadge status={session.status} size="xs" />
-                    </td>
-                    <td className="py-3 pr-3 text-right font-sans">
-                      <div className="flex items-center justify-end gap-2">
-                        {session.clean_count > 0 && (
-                          <a
-                            href={sessionApi.getCleanExportUrl(session.id, 'csv')}
-                            download
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60 text-[11px] font-semibold transition"
-                            title="Download Clean CSV"
-                          >
-                            <Download className="w-3 h-3" />
-                            <span>Download Clean</span>
-                          </a>
-                        )}
-                        <button
-                          onClick={() => onSelectSession(session.id)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-[11px] transition cursor-pointer"
-                        >
-                          <span>View</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+        <ChartCard title="Result breakdown" subtitle="How checked numbers were classified">
+          <div className="flex h-full flex-col">
+            <div className="relative h-48">
+              {breakdown.chart.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={breakdown.chart}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={58}
+                        outerRadius={84}
+                        paddingAngle={3}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {breakdown.chart.map((entry) => (
+                          <Cell key={entry.key} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="font-mono text-2xl font-bold text-white">{formatCompact(breakdown.total)}</span>
+                    <span className="text-[11px] text-zinc-500">numbers</span>
+                  </div>
+                </>
               ) : (
-                <tr>
-                  <td colSpan="8" className="py-8 text-center text-zinc-500 font-sans">
-                    No lead files found for this period. Click "Upload File" in the sidebar to get started.
-                  </td>
-                </tr>
+                <ChartEmpty message="No results yet for this period." />
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            <ul className="mt-4 space-y-2.5 border-t border-surface-border pt-4">
+              {breakdown.items.map((i) => (
+                <LegendDot
+                  key={i.key}
+                  color={i.color}
+                  label={i.name}
+                  value={i.value}
+                  pct={safeRate(i.value, breakdown.total)}
+                />
+              ))}
+            </ul>
+          </div>
+        </ChartCard>
       </div>
+
+      {/* ---------- Charts row 2 ---------- */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <ChartCard
+          title="DNC suppression by day"
+          subtitle="Numbers caught locally vs. flagged by Blacklist Alliance"
+          action={
+            <ul className="hidden items-center gap-4 text-[11px] text-zinc-400 sm:flex">
+              <li className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: COLORS.local }} /> Local DNC
+              </li>
+              <li className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: COLORS.bla }} /> BLA DNC
+              </li>
+            </ul>
+          }
+        >
+          <div className="h-64">
+            {hasDncTimeline ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={timeline} margin={{ top: 8, right: 4, left: -16, bottom: 0 }} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} vertical={false} />
+                  <XAxis
+                    dataKey="day"
+                    stroke={COLORS.axis}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={formatDateShort}
+                    minTickGap={24}
+                  />
+                  <YAxis stroke={COLORS.axis} fontSize={11} tickLine={false} axisLine={false} tickFormatter={formatCompact} width={56} />
+                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={<ChartTooltip labelFormatter={formatDateShort} />} />
+                  <Bar dataKey="local_dnc_leads" name="Local DNC" stackId="dnc" fill={COLORS.local} radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="bla_dnc_leads" name="BLA DNC" stackId="dnc" fill={COLORS.bla} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ChartEmpty message={`No DNC matches ${rangeLabel}.`} />
+            )}
+          </div>
+        </ChartCard>
+
+        <ChartCard title="Master DNC by source" subtitle="Where your suppression list comes from">
+          <div className="h-64">
+            {sourceData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sourceData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 0 }} barCategoryGap="28%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={COLORS.grid} horizontal={false} />
+                  <XAxis type="number" stroke={COLORS.axis} fontSize={11} tickLine={false} axisLine={false} tickFormatter={formatCompact} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke={COLORS.axis}
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    width={104}
+                    tick={{ fill: '#a1a1aa' }}
+                  />
+                  <Tooltip cursor={{ fill: 'rgba(255,255,255,0.03)' }} content={<ChartTooltip />} />
+                  <Bar dataKey="value" name="Records" radius={[0, 4, 4, 0]}>
+                    {sourceData.map((s) => (
+                      <Cell key={s.name} fill={s.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <ChartEmpty message="Master DNC is empty. Upload a DNC list to get started." />
+            )}
+          </div>
+        </ChartCard>
+      </div>
+
+      {/* ---------- Recent sessions ---------- */}
+      <section className="card overflow-hidden">
+        <header className="flex items-center justify-between gap-3 border-b border-surface-border px-5 py-4">
+          <div>
+            <h3 className="section-title">Recent file checks</h3>
+            <p className="section-subtitle">Latest sessions {rangeLabel}</p>
+          </div>
+        </header>
+
+        {recentSessions.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>User</th>
+                  <th className="text-right">Total</th>
+                  <th className="text-right">Already in DNC</th>
+                  <th className="text-right">DNC from BLA</th>
+                  <th className="text-right">Clean</th>
+                  <th className="w-40">Clean rate</th>
+                  <th className="text-center">Status</th>
+                  <th className="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentSessions.map((s) => {
+                  const rate = safeRate(s.clean_count, s.total_rows);
+                  return (
+                    <tr key={s.id}>
+                      <td>
+                        <button
+                          onClick={() => onSelectSession(s.id)}
+                          className="block max-w-[220px] truncate text-left font-medium text-white hover:text-emerald-300 transition"
+                        >
+                          {s.session_name}
+                        </button>
+                        <span className="block max-w-[220px] truncate font-mono text-[11px] text-zinc-500">
+                          {s.original_filename} · {formatDateTime(s.created_at)}
+                        </span>
+                      </td>
+                      <td className="text-zinc-400">{s.user_name || s.user_email || '—'}</td>
+                      <td className="text-right font-mono font-semibold text-white">{formatNumber(s.total_rows)}</td>
+                      <td className="text-right">
+                        {s.local_dnc_count > 0 ? (
+                          <span className="chip-amber">{formatNumber(s.local_dnc_count)}</span>
+                        ) : (
+                          <span className="font-mono text-zinc-600">0</span>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        {s.bla_dnc_count > 0 ? (
+                          <span className="chip-red">{formatNumber(s.bla_dnc_count)}</span>
+                        ) : (
+                          <span className="font-mono text-zinc-600">0</span>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        <span className="chip-emerald">{formatNumber(s.clean_count)}</span>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-raised">
+                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, rate)}%` }} />
+                          </div>
+                          <span className="w-12 text-right font-mono text-[11px] text-zinc-400">{rate.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="text-center">
+                        <StatusBadge status={s.status} size="xs" />
+                      </td>
+                      <td>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {s.clean_count > 0 && (
+                            <a
+                              href={sessionApi.getCleanExportUrl(s.id, 'csv')}
+                              download
+                              className="btn-icon"
+                              title="Download clean CSV"
+                              aria-label="Download clean CSV"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                          <button onClick={() => onSelectSession(s.id)} className="btn-secondary btn-sm">
+                            View <ArrowUpRight className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center gap-3 px-6 py-14 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-surface-border bg-surface-raised text-zinc-500">
+              <Inbox className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">No file checks {rangeLabel}</p>
+              <p className="mt-1 text-xs text-zinc-500">Upload a lead file to start a new verification session.</p>
+            </div>
+            <button onClick={onOpenNewScrub} className="btn-primary btn-sm mt-1">
+              <UploadCloud className="h-3.5 w-3.5" /> Upload file
+            </button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

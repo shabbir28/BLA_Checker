@@ -7,19 +7,17 @@ export function EmptyState({
   icon: Icon = Inbox,
   actionLabel,
   onAction,
+  compact = false,
 }) {
   return (
-    <div className="flex flex-col items-center justify-center p-12 text-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-950">
-      <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-3">
-        <Icon className="w-6 h-6" />
+    <div className={`flex flex-col items-center justify-center text-center ${compact ? 'p-8' : 'p-14'}`}>
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl border border-surface-border bg-surface-raised text-zinc-500">
+        <Icon className="h-6 w-6" />
       </div>
-      <h3 className="text-sm font-bold text-white mb-1">{title}</h3>
-      <p className="text-xs text-zinc-400 max-w-sm mb-5">{description}</p>
+      <h3 className="text-sm font-semibold text-white">{title}</h3>
+      <p className="mt-1 max-w-sm text-xs text-zinc-500">{description}</p>
       {actionLabel && onAction && (
-        <button
-          onClick={onAction}
-          className="px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black text-xs font-semibold transition"
-        >
+        <button onClick={onAction} className="btn-primary btn-sm mt-4">
           {actionLabel}
         </button>
       )}

@@ -70,8 +70,9 @@ class ScrubbingEngine {
       if (sessionRes.rows.length === 0) throw new Error('Session not found');
       const session = sessionRes.rows[0];
 
-      // 2. Parse File
-      const ext = path.extname(session.original_filename).toLowerCase();
+      // 2. Parse File - multer preserved the real extension on disk, so trust that over the
+      // client-supplied display name.
+      const ext = (path.extname(filePath) || path.extname(session.original_filename)).toLowerCase();
       let rawRows = [];
 
       if (ext === '.xlsx' || ext === '.xls') {
@@ -387,19 +388,20 @@ class ScrubbingEngine {
       console.log(`[ENGINE] Session ${sessionId} completed successfully in ${Date.now() - startTime}ms!`);
     } catch (error) {
       console.error(`[ENGINE] Scrubbing failed for session ${sessionId}:`, error);
-      await query(
-        `UPDATE checking_sessions
-         SET status = 'FAILED', stage = 'FAILED', error_message = $1, completed_at = NOW()
-         WHERE id = $2`,
-        [error.message || 'Scrubbing failed', sessionId]
-      );
-    } finally {
-      // Clean up temporary upload file if desired
       try {
-        if (fs.existsSync(filePath)) {
-          // Keep file or remove if finished
-          // fs.unlinkSync(filePath);
-        }
+        await query(
+          `UPDATE checking_sessions
+           SET status = 'FAILED', stage = 'FAILED', error_message = $1, completed_at = NOW()
+           WHERE id = $2`,
+          [error.message || 'Scrubbing failed', sessionId]
+        );
+      } catch (dbErr) {
+        console.error(`[ENGINE] Could not mark session ${sessionId} as FAILED:`, dbErr.message);
+      }
+    } finally {
+      // All rows are persisted in session_records, so the temp upload is no longer needed.
+      try {
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       } catch (cleanupErr) {
         console.warn('[ENGINE] Cleanup warning:', cleanupErr.message);
       }

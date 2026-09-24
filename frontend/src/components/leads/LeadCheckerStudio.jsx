@@ -2,37 +2,119 @@ import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { sessionApi } from '../../services/api';
 import StatusBadge from '../common/StatusBadge';
+import { formatNumber, safeRate } from '../../utils/format';
 import {
   UploadCloud,
-  CheckCircle2,
+  Check,
   AlertCircle,
   Download,
   ArrowRight,
+  ArrowLeft,
   Eye,
   RotateCcw,
   Sparkles,
   FileSpreadsheet,
+  FileText,
+  Loader2,
+  Database,
+  Zap,
+  ShieldCheck,
+  ListChecks,
 } from 'lucide-react';
 
+const STEPS = [
+  { number: 1, label: 'Upload file' },
+  { number: 2, label: 'Choose column' },
+  { number: 3, label: 'Checking' },
+  { number: 4, label: 'Download' },
+];
+
+const STAGE_LABELS = {
+  IDLE: 'Queued',
+  PARSING: 'Reading file',
+  DEDUPLICATING: 'Removing duplicates',
+  LOCAL_SCRUB: 'Matching against Master DNC',
+  BLA_VERIFY: 'Verifying with Blacklist Alliance',
+  SYNCING: 'Syncing new DNC numbers',
+  FINALIZING: 'Saving results',
+  DONE: 'Completed',
+  FAILED: 'Failed',
+};
+
+function StepTracker({ current }) {
+  return (
+    <ol className="card flex items-center gap-2 px-4 py-3 sm:px-5">
+      {STEPS.map((st, idx) => {
+        const done = current > st.number;
+        const active = current === st.number;
+        return (
+          <li key={st.number} className="flex flex-1 items-center last:flex-none">
+            <div className="flex items-center gap-2.5">
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                  done
+                    ? 'bg-emerald-500 text-black'
+                    : active
+                    ? 'bg-white text-black ring-4 ring-white/10'
+                    : 'border border-surface-border bg-surface-raised text-zinc-500'
+                }`}
+              >
+                {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : st.number}
+              </span>
+              <span
+                className={`hidden text-xs font-medium sm:inline ${
+                  active ? 'text-white' : done ? 'text-zinc-300' : 'text-zinc-500'
+                }`}
+              >
+                {st.label}
+              </span>
+            </div>
+            {idx < STEPS.length - 1 && (
+              <span className={`mx-3 hidden h-px flex-1 sm:block ${done ? 'bg-emerald-500/60' : 'bg-surface-border'}`} />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function StatTile({ label, value, hint, tone = 'zinc', icon: Icon }) {
+  const tones = {
+    zinc: 'border-surface-border bg-surface-raised text-white',
+    amber: 'border-amber-900/50 bg-amber-950/30 text-amber-300',
+    red: 'border-red-900/50 bg-red-950/30 text-red-300',
+    emerald: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
+  };
+  return (
+    <div className={`rounded-xl border p-4 ${tones[tone]}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[11px] font-medium opacity-80">{label}</span>
+        {Icon && <Icon className="h-3.5 w-3.5 opacity-70" />}
+      </div>
+      <span className="mt-1.5 block font-mono text-2xl font-bold leading-none">{value}</span>
+      {hint && <span className="mt-1.5 block text-[11px] opacity-60">{hint}</span>}
+    </div>
+  );
+}
+
 export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
-  // Steps: 1: Upload File, 2: Select Column, 3: Checking, 4: Results
   const [currentStep, setCurrentStep] = useState(1);
 
-  // File Upload State
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
 
-  // Preview State
   const [previewData, setPreviewData] = useState(null);
   const [selectedColumn, setSelectedColumn] = useState('');
   const [sessionName, setSessionName] = useState('');
 
-  // Active Session & Polling
   const [activeSession, setActiveSession] = useState(null);
   const [pollInterval, setPollInterval] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+  const [starting, setStarting] = useState(false);
 
   const fileInputRef = useRef(null);
 
@@ -42,24 +124,22 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
     };
   }, [pollInterval]);
 
-  const handleDragOver = (e) => e.preventDefault();
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelected(e.dataTransfer.files[0]);
-    }
-  };
-
   const handleFileSelected = (selectedFile) => {
+    if (!selectedFile) return;
     const ext = selectedFile.name.substring(selectedFile.name.lastIndexOf('.')).toLowerCase();
     if (!['.csv', '.xlsx', '.xls', '.txt'].includes(ext)) {
-      setUploadError('Please upload a CSV, Excel (.xlsx), or TXT file.');
+      setUploadError('Please upload a CSV, Excel (.xlsx / .xls), or TXT file.');
       return;
     }
     setFile(selectedFile);
     setUploadProgress(0);
     setUploadError(null);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFileSelected(e.dataTransfer.files?.[0]);
   };
 
   const handleUploadPreview = async () => {
@@ -72,23 +152,23 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await sessionApi.preview(formData, (percent) => {
-        setUploadProgress(percent);
-      });
+      const res = await sessionApi.preview(formData, setUploadProgress);
       setPreviewData(res.data);
       setSelectedColumn(res.data.detectedPhoneColumn || res.data.columns[0] || 'phone');
       setSessionName(`Check_${file.name.replace(/\.[^/.]+$/, '')}`);
       setCurrentStep(2);
     } catch (err) {
       console.error('[STUDIO] Preview error:', err);
-      setUploadError(err.response?.data?.message || 'Could not read file. Please verify file format.');
+      setUploadError(err.response?.data?.message || 'Could not read file. Please verify the file format.');
     } finally {
       setUploading(false);
     }
   };
 
   const handleStartChecking = async () => {
+    if (starting) return;
     try {
+      setStarting(true);
       setErrorMsg(null);
       const res = await sessionApi.start({
         tempFileId: previewData.tempFileId,
@@ -126,6 +206,8 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
       setPollInterval(interval);
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to start checking.');
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -137,238 +219,192 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
     setCurrentStep(1);
     setErrorMsg(null);
     setUploadError(null);
+    setUploadProgress(0);
   };
 
-  const steps = [
-    { number: 1, label: 'Upload File' },
-    { number: 2, label: 'Select Phone Column' },
-    { number: 3, label: 'Checking Numbers' },
-    { number: 4, label: 'Download Clean' },
-  ];
+  const progress = Number(activeSession?.progress_percent) || 0;
+  const cleanRate = activeSession ? safeRate(activeSession.clean_count, activeSession.total_rows) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* Wizard Step Progress Tracker */}
-      <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
-        {steps.map((st, idx) => {
-          const isDone = currentStep > st.number;
-          const isCurrent = currentStep === st.number;
-          return (
-            <div key={st.number} className="flex items-center flex-1 last:flex-none">
-              <div className="flex items-center gap-2">
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition ${
-                    isDone
-                      ? 'bg-emerald-500 text-black'
-                      : isCurrent
-                      ? 'bg-white text-black ring-2 ring-white/30'
-                      : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                  }`}
-                >
-                  {isDone ? <CheckCircle2 className="w-4 h-4 text-black" /> : st.number}
-                </div>
-                <span
-                  className={`text-xs font-medium hidden sm:inline ${
-                    isCurrent ? 'text-white' : isDone ? 'text-zinc-300' : 'text-zinc-500'
-                  }`}
-                >
-                  {st.label}
-                </span>
+    <div className="space-y-5 animate-fade-in">
+      <StepTracker current={currentStep} />
+
+      {/* ---------------- STEP 1: UPLOAD ---------------- */}
+      {currentStep === 1 && (
+        <div className="mx-auto w-full max-w-3xl">
+          <section className="card p-6 sm:p-8">
+            <header className="mb-6">
+              <h2 className="text-lg font-semibold text-white">Upload a lead file</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                We'll check every number against your Master DNC list, then verify the rest with Blacklist Alliance.
+              </p>
+            </header>
+
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
+              className={`group cursor-pointer rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
+                dragOver
+                  ? 'border-emerald-500/70 bg-emerald-950/20'
+                  : file
+                  ? 'border-emerald-800/60 bg-emerald-950/10'
+                  : 'border-surface-border-strong bg-surface-raised/40 hover:border-zinc-600'
+              }`}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={(e) => handleFileSelected(e.target.files?.[0])}
+                accept=".csv,.xlsx,.xls,.txt"
+                className="hidden"
+              />
+
+              <div
+                className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border transition-transform group-hover:scale-105 ${
+                  file ? 'border-emerald-800/60 bg-emerald-950/40 text-emerald-400' : 'border-surface-border bg-surface-card text-zinc-300'
+                }`}
+              >
+                {file ? <FileSpreadsheet className="h-7 w-7" /> : <UploadCloud className="h-7 w-7" />}
               </div>
-              {idx < steps.length - 1 && (
-                <div
-                  className={`flex-1 h-0.5 mx-3 hidden sm:block ${
-                    isDone ? 'bg-emerald-500/50' : 'bg-zinc-800'
-                  }`}
-                />
+
+              {file ? (
+                <>
+                  <p className="text-sm font-semibold text-white">{file.name}</p>
+                  <p className="mt-1 font-mono text-xs text-zinc-400">{(file.size / 1024).toFixed(1)} KB · ready</p>
+                  <p className="mt-3 text-xs text-zinc-500 underline-offset-2 group-hover:underline">Choose a different file</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-semibold text-white">Drop your file here, or click to browse</p>
+                  <p className="mt-1 text-xs text-zinc-500">CSV, Excel (.xlsx / .xls) or TXT · up to 150 MB</p>
+                </>
               )}
             </div>
-          );
-        })}
-      </div>
 
-      {/* STEP 1: UPLOAD FILE */}
-      {currentStep === 1 && (
-        <div className="p-8 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-6">
-          <div className="text-center max-w-lg mx-auto">
-            <h2 className="text-xl font-bold text-white tracking-tight">Upload Lead File</h2>
-            <p className="text-xs text-zinc-400 mt-1">
-              Select or drop your contact file. We will check every number against your DNC upload list and the BLA API.
-            </p>
-          </div>
-
-          <div
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-zinc-800 hover:border-zinc-600 bg-zinc-900/40 rounded-2xl p-10 text-center cursor-pointer transition group"
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={(e) => e.target.files && handleFileSelected(e.target.files[0])}
-              accept=".csv,.xlsx,.xls,.txt"
-              className="hidden"
-            />
-            <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 text-white flex items-center justify-center mx-auto mb-4 group-hover:scale-105 transition-transform">
-              <UploadCloud className="w-8 h-8 text-emerald-400" />
-            </div>
-
-            {file ? (
-              <div className="space-y-1">
-                <span className="text-sm font-bold text-white block">{file.name}</span>
-                <span className="text-xs text-zinc-400 block font-mono">
-                  {(file.size / 1024).toFixed(1)} KB · Ready to check
-                </span>
-                <span className="text-xs text-zinc-400 underline block mt-2">
-                  Click to select a different file
-                </span>
-              </div>
-            ) : (
-              <div className="space-y-1">
-                <span className="text-sm font-semibold text-white block">
-                  Click to choose file, or drag and drop here
-                </span>
-                <span className="text-xs text-zinc-500 block">
-                  Supports CSV, Excel (.xlsx), or TXT
-                </span>
+            {uploading && (
+              <div className="card-raised mt-5 space-y-2.5 p-4">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-2 font-medium text-zinc-200">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                    {uploadProgress < 100 ? 'Uploading file…' : 'Reading file structure…'}
+                  </span>
+                  <span className="font-mono font-semibold text-emerald-300">{uploadProgress}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-page">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all duration-200" style={{ width: `${Math.max(4, uploadProgress)}%` }} />
+                </div>
               </div>
             )}
-          </div>
 
-          {/* Upload Progress Bar */}
-          {uploading && (
-            <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-300 font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  {uploadProgress < 100 ? `Uploading file (${uploadProgress}%)...` : 'Reading file structure...'}
-                </span>
-                <span className="text-emerald-400 font-bold font-mono">{uploadProgress}%</span>
+            {uploadError && (
+              <div className="alert-error mt-5" role="alert">
+                <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+                <span>{uploadError}</span>
               </div>
-              <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-150"
-                  style={{ width: `${Math.max(5, uploadProgress)}%` }}
-                />
-              </div>
-            </div>
-          )}
+            )}
 
-          {uploadError && (
-            <div className="p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-              <span>{uploadError}</span>
+            <div className="mt-6 flex justify-end">
+              <button onClick={handleUploadPreview} disabled={!file || uploading} className="btn-primary">
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Reading…'}
+                  </>
+                ) : (
+                  <>
+                    Continue <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
             </div>
-          )}
-
-          <div className="flex justify-end pt-2">
-            <button
-              onClick={handleUploadPreview}
-              disabled={!file || uploading}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white hover:bg-zinc-200 disabled:opacity-40 text-black text-xs md:text-sm font-bold transition cursor-pointer shadow-md shadow-white/5"
-            >
-              <span>{uploading ? (uploadProgress < 100 ? `Uploading ${uploadProgress}%...` : 'Reading...') : 'Next Step'}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
+          </section>
         </div>
       )}
 
-      {/* STEP 2: SELECT PHONE COLUMN */}
+      {/* ---------------- STEP 2: COLUMN ---------------- */}
       {currentStep === 2 && previewData && (
-        <div className="p-8 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
+        <section className="card p-6 sm:p-8">
+          <header className="mb-6 flex flex-col gap-4 border-b border-surface-border pb-6 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white tracking-tight">Select Phone Column</h2>
-              <p className="text-xs text-zinc-400 mt-1">
-                Tell us which column in your file contains the phone numbers.
+              <h2 className="text-lg font-semibold text-white">Confirm the phone column</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                We detected <span className="font-mono text-emerald-300">{previewData.detectedPhoneColumn || '—'}</span>.
+                Change it if needed, then start checking.
               </p>
             </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCurrentStep(1)}
-                className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold"
-              >
-                Back
+            <div className="flex items-center gap-2">
+              <button onClick={() => setCurrentStep(1)} className="btn-secondary">
+                <ArrowLeft className="h-4 w-4" /> Back
               </button>
-              <button
-                onClick={handleStartChecking}
-                className="flex items-center gap-2 px-6 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs md:text-sm font-bold transition cursor-pointer shadow-md shadow-emerald-500/20"
-              >
-                <span>Start Checking</span>
-                <ArrowRight className="w-4 h-4" />
+              <button onClick={handleStartChecking} disabled={starting} className="btn-success">
+                {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
+                {starting ? 'Starting…' : 'Start checking'}
               </button>
             </div>
-          </div>
+          </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {errorMsg && (
+            <div className="alert-error mb-5" role="alert">
+              <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Session Name
-              </label>
+              <label htmlFor="sessionName" className="label">Session name</label>
               <input
+                id="sessionName"
                 type="text"
                 value={sessionName}
                 onChange={(e) => setSessionName(e.target.value)}
-                placeholder="Name this checking session"
-                className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs md:text-sm focus:outline-none focus:border-white"
+                placeholder="Name this check"
+                className="input"
               />
             </div>
-
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Which Column Has Phone Numbers?
-              </label>
-              <select
-                value={selectedColumn}
-                onChange={(e) => setSelectedColumn(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-white text-xs md:text-sm focus:outline-none focus:border-white"
-              >
+              <label htmlFor="phoneColumn" className="label">Phone number column</label>
+              <select id="phoneColumn" value={selectedColumn} onChange={(e) => setSelectedColumn(e.target.value)} className="select">
                 {previewData.columns.map((col) => (
                   <option key={col} value={col}>
-                    {col} {col === previewData.detectedPhoneColumn ? '(Auto-Detected)' : ''}
+                    {col}
+                    {col === previewData.detectedPhoneColumn ? '  (detected)' : ''}
                   </option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Table Preview */}
-          <div>
-            <span className="text-xs font-semibold text-zinc-400 block mb-2">
-              File Preview (First 5 Rows)
-            </span>
-            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/40">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-900 border-b border-zinc-800 text-zinc-400">
+          <div className="mt-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="eyebrow">Preview · first {previewData.previewRows.length} rows</span>
+              <span className="font-mono text-[11px] text-zinc-500">{previewData.originalFilename}</span>
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-surface-border">
+              <table className="table text-xs">
+                <thead>
                   <tr>
                     {previewData.columns.map((col) => (
-                      <th
-                        key={col}
-                        className={`p-3 font-semibold ${
-                          col === selectedColumn ? 'text-emerald-400 bg-emerald-950/20' : ''
-                        }`}
-                      >
+                      <th key={col} className={col === selectedColumn ? '!bg-emerald-950/40 !text-emerald-300' : ''}>
                         {col}
-                        {col === selectedColumn && (
-                          <span className="ml-1 text-[10px] text-emerald-300">[Phone Column]</span>
-                        )}
+                        {col === selectedColumn && <span className="ml-1.5 normal-case tracking-normal text-emerald-500">· phone</span>}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800 font-mono">
+                <tbody className="font-mono">
                   {previewData.previewRows.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-zinc-900/60">
+                    <tr key={idx}>
                       {previewData.columns.map((col) => (
-                        <td
-                          key={col}
-                          className={`p-3 text-zinc-300 ${
-                            col === selectedColumn ? 'font-bold text-white bg-emerald-950/10' : ''
-                          }`}
-                        >
+                        <td key={col} className={`!py-2.5 ${col === selectedColumn ? 'bg-emerald-950/15 font-semibold text-white' : ''}`}>
                           {String(row[col] ?? '')}
                         </td>
                       ))}
@@ -378,202 +414,107 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
               </table>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
-      {/* STEP 3: CHECKING IN PROGRESS */}
+      {/* ---------------- STEP 3: PROCESSING ---------------- */}
       {currentStep === 3 && activeSession && (
-        <div className="p-8 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <section className="card p-6 sm:p-8">
+          <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <h2 className="text-xl font-bold text-white tracking-tight">Checking Numbers...</h2>
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                </span>
+                <h2 className="text-lg font-semibold text-white">Checking numbers…</h2>
               </div>
-              <p className="text-xs text-zinc-400 font-mono">
-                {activeSession.original_filename}
-              </p>
+              <p className="mt-1 font-mono text-xs text-zinc-500">{activeSession.original_filename}</p>
             </div>
             <StatusBadge status={activeSession.status} />
-          </div>
+          </header>
 
-          {/* Progress Bar */}
           <div className="space-y-2">
-            <div className="flex justify-between text-xs font-mono">
-              <span className="text-zinc-400">Checking Progress</span>
-              <span className="text-emerald-400 font-bold">{activeSession.progress_percent || 0}%</span>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-zinc-300">{STAGE_LABELS[activeSession.stage] || activeSession.stage || 'Working'}</span>
+              <span className="font-mono font-semibold text-emerald-300">{progress.toFixed(0)}%</span>
             </div>
-            <div className="w-full h-3 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-surface-raised">
               <div
-                className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
-                style={{ width: `${activeSession.progress_percent || 5}%` }}
+                className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+                style={{ width: `${Math.max(4, progress)}%` }}
               />
             </div>
           </div>
 
-          {/* Live Counters */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-            <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
-              <span className="text-xs text-zinc-400 block mb-1">Total in File</span>
-              <span className="text-xl font-bold text-white font-mono">
-                {activeSession.total_rows?.toLocaleString() || 0}
-              </span>
-              <span className="text-[10px] text-zinc-500 block mt-0.5">Uploaded numbers</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-900/40">
-              <span className="text-xs text-amber-400 font-medium block mb-1">Already in DNC DB</span>
-              <span className="text-xl font-bold text-amber-400 font-mono">
-                {activeSession.local_dnc_count?.toLocaleString() || 0}
-              </span>
-              <span className="text-[10px] text-amber-400/80 block mt-0.5">Skipped from BLA</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-red-950/20 border border-red-900/40">
-              <span className="text-xs text-red-400 font-medium block mb-1">DNC from BLA</span>
-              <span className="text-xl font-bold text-red-400 font-mono">
-                {activeSession.bla_dnc_count?.toLocaleString() || 0}
-              </span>
-              <span className="text-[10px] text-red-400/80 block mt-0.5">Added to DNC list</span>
-            </div>
-
-            <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/40">
-              <span className="text-xs text-emerald-400 font-medium block mb-1">Fresh Numbers</span>
-              <span className="text-xl font-bold text-emerald-400 font-mono">
-                {activeSession.clean_count?.toLocaleString() || 0}
-              </span>
-              <span className="text-[10px] text-emerald-500 block mt-0.5">Safe & Clean</span>
-            </div>
+          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatTile label="Total in file" value={formatNumber(activeSession.total_rows)} hint="Uploaded numbers" icon={FileText} />
+            <StatTile label="Already in DNC" value={formatNumber(activeSession.local_dnc_count)} hint="Skipped BLA API" tone="amber" icon={Database} />
+            <StatTile label="DNC from BLA" value={formatNumber(activeSession.bla_dnc_count)} hint="Added to Master DNC" tone="red" icon={Zap} />
+            <StatTile label="Clean numbers" value={formatNumber(activeSession.clean_count)} hint="Safe to dial" tone="emerald" icon={ShieldCheck} />
           </div>
 
           {errorMsg && (
-            <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
-              <span className="font-bold block mb-1">Error:</span>
-              <span>{errorMsg}</span>
+            <div className="alert-error mt-6" role="alert">
+              <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+              <div>
+                <p className="font-semibold">Checking failed</p>
+                <p className="mt-0.5 text-red-300/90">{errorMsg}</p>
+                <button onClick={handleReset} className="btn-secondary btn-sm mt-3">
+                  <RotateCcw className="h-3.5 w-3.5" /> Try another file
+                </button>
+              </div>
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      {/* STEP 4: RESULTS & DOWNLOAD */}
+      {/* ---------------- STEP 4: RESULTS ---------------- */}
       {currentStep === 4 && activeSession && (
-        <div className="p-8 rounded-2xl bg-zinc-950 border border-zinc-800 space-y-6">
-          <div className="text-center max-w-lg mx-auto space-y-2">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-950 border border-emerald-800 text-emerald-400 flex items-center justify-center mx-auto mb-2 shadow-xl shadow-emerald-950/40">
-              <Sparkles className="w-7 h-7" />
+        <section className="card p-6 sm:p-8">
+          <header className="mx-auto mb-8 max-w-lg text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-800/60 bg-emerald-950/50 text-emerald-400 shadow-glow">
+              <Sparkles className="h-7 w-7" />
             </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">Checking Complete!</h2>
-            <p className="text-xs md:text-sm text-zinc-400">
-              Your file <span className="text-white font-mono font-semibold">{activeSession.original_filename}</span> has been completely checked. Clean numbers are ready for download.
+            <h2 className="text-2xl font-bold tracking-tight text-white">Check complete</h2>
+            <p className="mt-2 text-sm text-zinc-400">
+              <span className="font-mono text-zinc-200">{activeSession.original_filename}</span> has been fully verified.
+              Your clean list is ready to download.
             </p>
+          </header>
+
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatTile label="Total in file" value={formatNumber(activeSession.total_rows)} hint="Uploaded numbers" icon={FileText} />
+            <StatTile label="Already in DNC" value={formatNumber(activeSession.local_dnc_count)} hint="Skipped BLA API" tone="amber" icon={Database} />
+            <StatTile label="DNC from BLA" value={formatNumber(activeSession.bla_dnc_count)} hint="Saved to Master DNC" tone="red" icon={Zap} />
+            <StatTile label="Clean numbers" value={formatNumber(activeSession.clean_count)} hint={`${cleanRate.toFixed(1)}% of file`} tone="emerald" icon={ShieldCheck} />
           </div>
 
-          {/* 4 Cards: Total in File, Already in DB, From BLA, Fresh Numbers */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            {/* 1. Total Numbers in File */}
-            <div className="p-4 rounded-xl bg-zinc-900/60 border border-zinc-800">
-              <span className="text-xs text-zinc-400 block mb-1">Total in File</span>
-              <span className="text-2xl font-bold text-white font-mono">
-                {activeSession.total_rows?.toLocaleString() || 0}
-              </span>
-              <span className="text-[11px] text-zinc-500 block mt-1">Uploaded leads</span>
-            </div>
-
-            {/* 2. Already in DNC Database */}
-            <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-900/50">
-              <span className="text-xs text-amber-400 font-bold block mb-1">Already in DNC Database</span>
-              <span className="text-2xl font-extrabold text-amber-400 font-mono">
-                {activeSession.local_dnc_count?.toLocaleString() || 0}
-              </span>
-              <span className="text-[11px] text-amber-400/80 block mt-1">
-                Skipped BLA API
-              </span>
-            </div>
-
-            {/* 3. DNC from BLA */}
-            <div className="p-4 rounded-xl bg-red-950/30 border border-red-900/50">
-              <span className="text-xs text-red-400 font-bold block mb-1">DNC from BLA</span>
-              <span className="text-2xl font-extrabold text-red-400 font-mono">
-                {activeSession.bla_dnc_count?.toLocaleString() || 0}
-              </span>
-              <span className="text-[11px] text-red-400/80 block mt-1">
-                Saved to Master DNC
-              </span>
-            </div>
-
-            {/* 4. Fresh Numbers */}
-            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
-              <span className="text-xs text-emerald-400 font-bold block mb-1">Fresh Numbers</span>
-              <span className="text-2xl font-extrabold text-emerald-400 font-mono">
-                {activeSession.clean_count?.toLocaleString() || 0}
-              </span>
-              <span className="text-[11px] text-emerald-400/80 block mt-1">
-                {activeSession.total_rows > 0
-                  ? ((activeSession.clean_count / activeSession.total_rows) * 100).toFixed(1)
-                  : 0}
-                % Clean Verified
-              </span>
-            </div>
-          </div>
-
-          {/* Download Action Box */}
-          <div className="p-6 rounded-2xl bg-zinc-900 border border-zinc-800 text-center space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-white">Download Your Results</h3>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Download verified clean phone numbers or download the complete audit report.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-center gap-3">
-              <a
-                href={sessionApi.getCleanExportUrl(activeSession.id, 'csv')}
-                download
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs md:text-sm font-bold shadow-lg shadow-emerald-500/20 transition cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Download Clean Numbers (CSV)</span>
+          <div className="card-raised mt-6 p-5 text-center">
+            <h3 className="text-sm font-semibold text-white">Download your results</h3>
+            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns. The full report includes every number and its status.</p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+              <a href={sessionApi.getCleanExportUrl(activeSession.id, 'csv')} download className="btn-success">
+                <Download className="h-4 w-4" /> Clean numbers (CSV)
               </a>
-
-              <a
-                href={sessionApi.getCleanExportUrl(activeSession.id, 'xlsx')}
-                download
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs md:text-sm font-semibold transition cursor-pointer"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                <span>Download Clean Numbers (Excel)</span>
+              <a href={sessionApi.getCleanExportUrl(activeSession.id, 'xlsx')} download className="btn-secondary">
+                <FileSpreadsheet className="h-4 w-4 text-emerald-400" /> Clean numbers (Excel)
               </a>
-
-              <a
-                href={sessionApi.getFullExportUrl(activeSession.id, 'csv')}
-                download
-                className="flex items-center gap-2 px-4 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 text-xs font-medium transition cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-                <span>Full Report (CSV)</span>
+              <a href={sessionApi.getFullExportUrl(activeSession.id, 'csv')} download className="btn-ghost">
+                <Download className="h-4 w-4" /> Full report (CSV)
               </a>
             </div>
           </div>
 
-          {/* Bottom Actions */}
-          <div className="flex items-center justify-between pt-2">
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold transition"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Check Another File</span>
+          <div className="mt-6 flex flex-col-reverse items-stretch justify-between gap-2 sm:flex-row sm:items-center">
+            <button onClick={handleReset} className="btn-secondary">
+              <RotateCcw className="h-4 w-4" /> Check another file
             </button>
-
-            <button
-              onClick={() => onViewSessionDetails(activeSession.id)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-semibold transition"
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>View All Numbers</span>
+            <button onClick={() => onViewSessionDetails(activeSession.id)} className="btn-secondary">
+              <Eye className="h-4 w-4" /> View every number
             </button>
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

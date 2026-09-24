@@ -1,11 +1,10 @@
+// Must be the first import: ESM hoists imports, so env vars have to be loaded before
+// modules like middleware/auth.js read process.env at evaluation time.
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import multer from 'multer';
 
 import authRoutes from './routes/authRoutes.js';
@@ -13,12 +12,7 @@ import dncRoutes from './routes/dncRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { pool } from './config/db.js';
-import { UPLOADS_DIR } from './config/uploads.js';
-
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import './config/uploads.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -68,8 +62,11 @@ app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: `Upload error: ${err.message}` });
   }
-  return res.status(500).json({
-    message: err.message || 'An unexpected internal server error occurred.',
+  const status = Number.isInteger(err.status) && err.status >= 400 && err.status < 600 ? err.status : 500;
+  return res.status(status).json({
+    message: status === 500
+      ? 'An unexpected internal server error occurred.'
+      : err.message || 'Request failed.',
   });
 });
 

@@ -5,53 +5,199 @@
 /* stylelint-enable at-rule-no-unknown */
 
 @layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
-    background-color: #000000;
-    color: #f4f4f5;
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #050506;
+    color: #e4e4e7;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
     min-height: 100vh;
     overflow-x: hidden;
   }
+
+  h1, h2, h3, h4 {
+    letter-spacing: -0.01em;
+  }
+
+  /* Numbers line up in tables and KPI cards */
+  .font-mono,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(0.7);
+    cursor: pointer;
+  }
 }
 
-/* Minimalist Dark Scrollbar */
+@layer components {
+  /* ---------- Surfaces ---------- */
+  .card {
+    @apply rounded-2xl border border-surface-border bg-surface-card shadow-card;
+  }
+  .card-hover {
+    @apply transition-colors duration-200 hover:border-surface-border-strong;
+  }
+  .card-raised {
+    @apply rounded-xl border border-surface-border bg-surface-raised;
+  }
+
+  /* ---------- Typography ---------- */
+  .page-title {
+    @apply text-xl md:text-2xl font-bold tracking-tight text-white;
+  }
+  .page-subtitle {
+    @apply text-sm text-zinc-400 mt-1;
+  }
+  .section-title {
+    @apply text-sm font-semibold text-white;
+  }
+  .section-subtitle {
+    @apply text-xs text-zinc-500 mt-0.5;
+  }
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-500;
+  }
+
+  /* ---------- Buttons ---------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-all duration-150 select-none
+      focus:outline-none focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-2 focus-visible:ring-offset-black
+      disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none;
+  }
+  .btn-primary {
+    @apply btn bg-white text-black hover:bg-zinc-200 active:bg-zinc-300 px-4 py-2.5 shadow-sm;
+  }
+  .btn-secondary {
+    @apply btn bg-surface-raised text-zinc-200 border border-surface-border hover:bg-surface-hover hover:border-surface-border-strong px-4 py-2.5;
+  }
+  .btn-ghost {
+    @apply btn text-zinc-400 hover:text-white hover:bg-surface-raised px-3 py-2;
+  }
+  .btn-success {
+    @apply btn bg-emerald-500 text-black hover:bg-emerald-400 active:bg-emerald-600 px-4 py-2.5 shadow-[0_8px_24px_-10px_rgba(16,185,129,0.6)];
+  }
+  .btn-danger {
+    @apply btn bg-red-600 text-white hover:bg-red-500 px-4 py-2.5;
+  }
+  .btn-sm {
+    @apply text-xs px-3 py-2 rounded-lg;
+  }
+  .btn-icon {
+    @apply btn p-2 rounded-lg bg-surface-raised text-zinc-400 border border-surface-border hover:text-white hover:border-surface-border-strong;
+  }
+
+  /* ---------- Forms ---------- */
+  .label {
+    @apply block text-xs font-medium text-zinc-400 mb-1.5;
+  }
+  .input {
+    @apply w-full rounded-xl bg-surface-raised border border-surface-border px-3.5 py-2.5 text-sm text-white placeholder-zinc-500
+      transition-colors duration-150 focus:outline-none focus:border-zinc-500 focus:ring-2 focus:ring-white/10;
+  }
+  .input-with-icon {
+    @apply pl-10;
+  }
+  .select {
+    @apply input appearance-none pr-9 bg-no-repeat bg-[right_0.75rem_center] cursor-pointer;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2371717a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-size: 1.1rem;
+  }
+
+  /* ---------- Tables ---------- */
+  .table {
+    @apply w-full text-left text-sm;
+  }
+  .table thead th {
+    @apply py-3 px-4 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 bg-surface-raised/60 border-b border-surface-border whitespace-nowrap;
+  }
+  .table tbody td {
+    @apply py-3.5 px-4 text-zinc-300 align-middle;
+  }
+  .table tbody tr {
+    @apply border-b border-surface-border/70 last:border-b-0 transition-colors;
+  }
+  .table tbody tr:hover {
+    @apply bg-surface-raised/40;
+  }
+
+  /* ---------- Pills / chips ---------- */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tabular;
+  }
+  .chip-emerald { @apply chip bg-emerald-950/50 text-emerald-300 border-emerald-800/60; }
+  .chip-amber   { @apply chip bg-amber-950/50 text-amber-300 border-amber-800/60; }
+  .chip-red     { @apply chip bg-red-950/50 text-red-300 border-red-800/60; }
+  .chip-zinc    { @apply chip bg-surface-raised text-zinc-300 border-surface-border; }
+  .chip-blue    { @apply chip bg-blue-950/50 text-blue-300 border-blue-800/60; }
+
+  /* ---------- Alerts ---------- */
+  .alert-error {
+    @apply flex items-start gap-2.5 rounded-xl border border-red-900/60 bg-red-950/40 px-3.5 py-3 text-xs text-red-200;
+  }
+  .alert-success {
+    @apply flex items-start gap-2.5 rounded-xl border border-emerald-900/60 bg-emerald-950/40 px-3.5 py-3 text-xs text-emerald-200;
+  }
+
+  /* ---------- Skeleton ---------- */
+  .skeleton {
+    @apply rounded-lg bg-surface-raised relative overflow-hidden;
+    background: linear-gradient(90deg, #131316 0%, #1b1b20 50%, #131316 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+/* Minimalist dark scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #000000;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: #27272a;
   border-radius: 9999px;
+  border: 2px solid #050506;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
 
-/* True Black Card Styling */
-.black-card {
-  background-color: #09090b;
-  border: 1px solid #27272a;
-  border-radius: 1rem;
-}
-
-.black-card-hover {
-  transition: all 0.15s ease-in-out;
-}
-
-.black-card-hover:hover {
-  border-color: #3f3f46;
-  background-color: #0d0d10;
-}
-
-/* Subtle dot grid pattern */
+/* Subtle dot grid pattern for hero / auth backgrounds */
 .bg-black-dots {
-  background-color: #000000;
-  background-image: radial-gradient(#27272a 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-color: #050506;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Soft radial glow behind hero content */
+.bg-glow {
+  background:
+    radial-gradient(60% 50% at 20% 20%, rgba(16, 185, 129, 0.18), transparent 60%),
+    radial-gradient(50% 40% at 80% 80%, rgba(6, 182, 212, 0.12), transparent 60%);
+}
+
+/* Recharts: remove default focus outline on wrappers */
+.recharts-wrapper:focus,
+.recharts-surface:focus {
+  outline: none;
 }

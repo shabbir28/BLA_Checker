@@ -3,6 +3,8 @@ import { dncApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import Modal from '../common/Modal';
 import LoadingSpinner from '../common/LoadingSpinner';
+import EmptyState from '../common/EmptyState';
+import { formatNumber, formatCompact } from '../../utils/format';
 import {
   UploadCloud,
   Plus,
@@ -13,7 +15,27 @@ import {
   ChevronRight,
   Database,
   RefreshCw,
+  Loader2,
+  FileSpreadsheet,
+  CheckCircle2,
+  Zap,
+  Clock,
+  AlertCircle,
 } from 'lucide-react';
+
+const SOURCE_TABS = [
+  { id: 'ALL', label: 'All' },
+  { id: 'MANUAL_UPLOAD', label: 'Uploaded' },
+  { id: 'BLA_SYNC', label: 'BLA synced' },
+  { id: 'MANUAL_ENTRY', label: 'Manual' },
+];
+
+function sourceChip(source) {
+  if (source === 'BLA_SYNC') return <span className="chip-emerald">BLA</span>;
+  if (source === 'MANUAL_UPLOAD') return <span className="chip-zinc">Upload</span>;
+  if (source === 'MANUAL_ENTRY') return <span className="chip-blue">Manual</span>;
+  return <span className="chip-zinc">{source}</span>;
+}
 
 export function MasterDncManager() {
   const { isAdmin } = useAuth();
@@ -23,28 +45,24 @@ export function MasterDncManager() {
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
 
-  // Filters & Pagination
   const [search, setSearch] = useState('');
   const [sourceFilter, setSourceFilter] = useState('ALL');
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
 
-  // Modals
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isSingleModalOpen, setIsSingleModalOpen] = useState(false);
 
-  // Upload Form State
   const [uploadFile, setUploadFile] = useState(null);
   const [campaignName, setCampaignName] = useState('');
   const [uploadNotes, setUploadNotes] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploadPhase, setUploadPhase] = useState('idle'); // 'idle' | 'uploading' | 'processing' | 'completed'
+  const [uploadPhase, setUploadPhase] = useState('idle');
   const [uploadResult, setUploadResult] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Single Add Form State
   const [singlePhone, setSinglePhone] = useState('');
   const [singleCampaign, setSingleCampaign] = useState('');
   const [singleNotes, setSingleNotes] = useState('');
@@ -63,12 +81,7 @@ export function MasterDncManager() {
   const fetchRecords = async (targetPage = page, targetSource = sourceFilter, targetSearch = search) => {
     try {
       setTableLoading(true);
-      const res = await dncApi.list({
-        page: targetPage,
-        limit: 50,
-        source: targetSource,
-        search: targetSearch,
-      });
+      const res = await dncApi.list({ page: targetPage, limit: 50, source: targetSource, search: targetSearch });
       setRecords(res.data.data || []);
       setPagination(res.data.pagination);
     } catch (err) {
@@ -105,10 +118,20 @@ export function MasterDncManager() {
     fetchRecords(newPage, sourceFilter, search);
   };
 
+  const openUploadModal = () => {
+    setUploadFile(null);
+    setUploadResult(null);
+    setUploadError(null);
+    setUploadProgress(0);
+    setUploadPhase('idle');
+    setCampaignName('');
+    setUploadNotes('');
+    setIsUploadModalOpen(true);
+  };
+
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!uploadFile) return;
-
     try {
       setUploading(true);
       setUploadProgress(0);
@@ -123,9 +146,7 @@ export function MasterDncManager() {
 
       const res = await dncApi.upload(formData, (percent) => {
         setUploadProgress(percent);
-        if (percent >= 100) {
-          setUploadPhase('processing');
-        }
+        if (percent >= 100) setUploadPhase('processing');
       });
 
       setUploadPhase('completed');
@@ -143,17 +164,10 @@ export function MasterDncManager() {
   const handleSingleSubmit = async (e) => {
     e.preventDefault();
     if (!singlePhone) return;
-
     try {
       setSingleSubmitting(true);
       setSingleError(null);
-
-      await dncApi.addSingle({
-        phone: singlePhone,
-        campaign: singleCampaign,
-        notes: singleNotes,
-      });
-
+      await dncApi.addSingle({ phone: singlePhone, campaign: singleCampaign, notes: singleNotes });
       setIsSingleModalOpen(false);
       setSinglePhone('');
       setSingleCampaign('');
@@ -168,7 +182,7 @@ export function MasterDncManager() {
   };
 
   const handleDeleteRecord = async (id) => {
-    if (!window.confirm('Delete this phone number from DNC list?')) return;
+    if (!window.confirm('Remove this phone number from the Master DNC list?')) return;
     try {
       await dncApi.delete(id);
       await fetchStats();
@@ -183,105 +197,68 @@ export function MasterDncManager() {
     await fetchRecords(page, sourceFilter, search);
   };
 
-  if (loading) return <LoadingSpinner message="Loading DNC Upload..." size="lg" />;
+  if (loading) return <LoadingSpinner message="Loading Master DNC…" size="lg" />;
 
+  const bySource = (key) => Number(stats?.bySource?.find((s) => s.source === key)?.count || 0);
   const totalCount = stats?.total || 0;
-  const blaSyncCount = stats?.bySource?.find((s) => s.source === 'BLA_SYNC')?.count || 0;
-  const uploadedCount =
-    (stats?.bySource?.find((s) => s.source === 'MANUAL_UPLOAD')?.count || 0) +
-    (stats?.bySource?.find((s) => s.source === 'INITIAL_SEED')?.count || 0);
-  const last24h = stats?.addedLast24h || 0;
+  const statTiles = [
+    { icon: Database, label: 'Total records', value: formatCompact(totalCount), full: formatNumber(totalCount), cls: 'text-white' },
+    { icon: Zap, label: 'BLA synced', value: formatCompact(bySource('BLA_SYNC')), full: formatNumber(bySource('BLA_SYNC')), cls: 'text-emerald-300' },
+    { icon: FileSpreadsheet, label: 'Uploaded', value: formatCompact(bySource('MANUAL_UPLOAD') + bySource('INITIAL_SEED')), full: formatNumber(bySource('MANUAL_UPLOAD') + bySource('INITIAL_SEED')), cls: 'text-white' },
+    { icon: Clock, label: 'Added last 24h', value: formatCompact(stats?.addedLast24h || 0), full: formatNumber(stats?.addedLast24h || 0), cls: 'text-cyan-300' },
+  ];
 
   return (
-    <div className="space-y-5">
-      {/* Header Row */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">DNC Upload</h2>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Manage your Do Not Call list. Numbers here are filtered for free before calling BLA API.
-          </p>
+          <span className="eyebrow">Suppression list</span>
+          <h2 className="page-title mt-1">DNC Upload</h2>
+          <p className="page-subtitle">Numbers on this list are filtered locally before any paid Blacklist Alliance lookup.</p>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={refreshAll}
-            className="p-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 transition"
-            title="Refresh"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={refreshAll} className="btn-icon" title="Refresh" aria-label="Refresh">
+            <RefreshCw className="h-4 w-4" />
           </button>
-
-          <a
-            href={dncApi.getExportUrl(sourceFilter)}
-            download
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Export</span>
+          <a href={dncApi.getExportUrl(sourceFilter)} download className="btn-secondary">
+            <Download className="h-4 w-4" /> Export
           </a>
-
-          <button
-            onClick={() => setIsSingleModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-800 transition cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Add Number</span>
-          </button>
-
-          <button
-            onClick={() => {
-              setUploadFile(null);
-              setUploadResult(null);
-              setUploadError(null);
-              setCampaignName('');
-              setUploadNotes('');
-              setIsUploadModalOpen(true);
-            }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white hover:bg-zinc-200 text-black text-xs font-bold transition shadow-sm cursor-pointer"
-          >
-            <UploadCloud className="w-3.5 h-3.5" />
-            <span>Upload DNC</span>
-          </button>
+          {isAdmin && (
+            <>
+              <button onClick={() => setIsSingleModalOpen(true)} className="btn-secondary">
+                <Plus className="h-4 w-4" /> Add number
+              </button>
+              <button onClick={openUploadModal} className="btn-primary">
+                <UploadCloud className="h-4 w-4" /> Upload DNC list
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Compact Stats Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800">
-          <span className="text-[11px] text-zinc-500 block">Total DNC</span>
-          <span className="text-lg font-bold text-white font-mono">{totalCount.toLocaleString()}</span>
-        </div>
-        <div className="px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800">
-          <span className="text-[11px] text-zinc-500 block">BLA Synced</span>
-          <span className="text-lg font-bold text-emerald-400 font-mono">{Number(blaSyncCount).toLocaleString()}</span>
-        </div>
-        <div className="px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800">
-          <span className="text-[11px] text-zinc-500 block">Uploaded</span>
-          <span className="text-lg font-bold text-white font-mono">{Number(uploadedCount).toLocaleString()}</span>
-        </div>
-        <div className="px-4 py-3 rounded-xl bg-zinc-950 border border-zinc-800">
-          <span className="text-[11px] text-zinc-500 block">Last 24h</span>
-          <span className="text-lg font-bold text-white font-mono">{last24h.toLocaleString()}</span>
-        </div>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        {statTiles.map((t) => {
+          const Icon = t.icon;
+          return (
+            <div key={t.label} className="card card-hover p-4" title={t.full}>
+              <div className="flex items-center justify-between text-zinc-500">
+                <span className="text-[11px] font-medium">{t.label}</span>
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              <span className={`mt-1.5 block font-mono text-xl font-bold leading-none ${t.cls}`}>{t.value}</span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Filter Tabs + Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto">
-          {[
-            { id: 'ALL', label: 'All' },
-            { id: 'MANUAL_UPLOAD', label: 'Uploaded' },
-            { id: 'BLA_SYNC', label: 'BLA Synced' },
-            { id: 'INITIAL_SEED', label: 'Seeded' },
-          ].map((tab) => (
+      <div className="card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-surface-border bg-surface-raised p-1">
+          {SOURCE_TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => handleSourceChange(tab.id)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer ${
-                sourceFilter === tab.id
-                  ? 'bg-zinc-800 text-white'
-                  : 'text-zinc-500 hover:text-white hover:bg-zinc-900'
+              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                sourceFilter === tab.id ? 'bg-surface-card text-white shadow-sm ring-1 ring-surface-border-strong' : 'text-zinc-400 hover:text-white'
               }`}
             >
               {tab.label}
@@ -289,68 +266,60 @@ export function MasterDncManager() {
           ))}
         </div>
 
-        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-64">
-          <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+        <form onSubmit={handleSearchSubmit} className="relative w-full sm:w-72">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <input
-            type="text"
+            type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search phone number..."
-            className="w-full pl-8 pr-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-xs placeholder-zinc-600 focus:outline-none focus:border-zinc-600 font-mono"
+            placeholder="Search phone number… (Enter)"
+            className="input input-with-icon py-2 font-mono"
           />
         </form>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl bg-zinc-950 border border-zinc-800 overflow-hidden">
+      <section className="card overflow-hidden">
         {tableLoading ? (
-          <LoadingSpinner message="Searching..." />
-        ) : records.length > 0 ? (
+          <LoadingSpinner message="Searching…" />
+        ) : records.length === 0 ? (
+          <EmptyState
+            icon={Database}
+            title="No DNC numbers found"
+            description="Upload a DNC list or add numbers individually."
+            actionLabel={isAdmin ? 'Upload DNC list' : undefined}
+            onAction={openUploadModal}
+          />
+        ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="text-[10px] uppercase tracking-wider text-zinc-500 bg-zinc-900/50 border-b border-zinc-800">
+              <table className="table">
+                <thead>
                   <tr>
-                    <th className="py-2.5 pl-4">Phone</th>
-                    <th className="py-2.5">Normalized</th>
-                    <th className="py-2.5">Source</th>
-                    <th className="py-2.5">File / Campaign</th>
-                    <th className="py-2.5">Date</th>
-                    {isAdmin && <th className="py-2.5 pr-4 text-right"></th>}
+                    <th>Phone</th>
+                    <th>Normalized</th>
+                    <th>Source</th>
+                    <th>File / campaign</th>
+                    <th>Added</th>
+                    {isAdmin && <th className="text-right">Actions</th>}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800/60 font-mono">
+                <tbody>
                   {records.map((rec) => (
-                    <tr key={rec.id} className="hover:bg-zinc-900/30 transition">
-                      <td className="py-2.5 pl-4 text-zinc-400 text-[11px]">{rec.phone_number}</td>
-                      <td className="py-2.5 text-white font-medium text-[11px]">{rec.normalized_phone}</td>
-                      <td className="py-2.5 font-sans">
-                        <span
-                          className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            rec.source === 'BLA_SYNC'
-                              ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/40'
-                              : rec.source === 'MANUAL_UPLOAD'
-                              ? 'bg-zinc-800 text-zinc-300 border border-zinc-700'
-                              : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
-                          }`}
-                        >
-                          {rec.source === 'BLA_SYNC' ? 'BLA' : rec.source === 'MANUAL_UPLOAD' ? 'Upload' : rec.source}
-                        </span>
-                      </td>
-                      <td className="py-2.5 font-sans text-zinc-500 text-[11px] truncate max-w-[140px]">
-                        {rec.campaign_or_file || '—'}
-                      </td>
-                      <td className="py-2.5 text-zinc-600 text-[10px]">
-                        {new Date(rec.created_at).toLocaleDateString()}
-                      </td>
+                    <tr key={rec.id}>
+                      <td className="font-mono text-zinc-400">{rec.phone_number}</td>
+                      <td className="font-mono font-semibold text-white">{rec.normalized_phone}</td>
+                      <td>{sourceChip(rec.source)}</td>
+                      <td className="max-w-[220px] truncate text-xs text-zinc-400">{rec.campaign_or_file || '—'}</td>
+                      <td className="whitespace-nowrap text-xs text-zinc-500">{new Date(rec.created_at).toLocaleDateString()}</td>
                       {isAdmin && (
-                        <td className="py-2.5 pr-4 text-right font-sans">
+                        <td className="text-right">
                           <button
                             onClick={() => handleDeleteRecord(rec.id)}
-                            className="p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-900 transition"
-                            title="Delete"
+                            className="btn-icon hover:!border-red-900/60 hover:!text-red-400"
+                            title="Remove"
+                            aria-label="Remove"
                           >
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </td>
                       )}
@@ -360,258 +329,164 @@ export function MasterDncManager() {
               </table>
             </div>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-between px-4 py-2.5 border-t border-zinc-800 text-[11px] text-zinc-500 font-sans">
+            <div className="flex items-center justify-between border-t border-surface-border px-4 py-3 text-xs text-zinc-400">
               <span>
-                {(page - 1) * pagination.limit + 1}–{Math.min(page * pagination.limit, pagination.total)} of{' '}
-                {pagination.total.toLocaleString()}
+                Showing <span className="font-mono text-zinc-200">{(page - 1) * pagination.limit + 1}–{Math.min(page * pagination.limit, pagination.total)}</span> of{' '}
+                <span className="font-mono text-zinc-200">{formatNumber(pagination.total)}</span>
               </span>
-              <div className="flex items-center gap-1.5 font-mono">
-                <button
-                  onClick={() => handlePageChange(page - 1)}
-                  disabled={page <= 1}
-                  className="p-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 disabled:opacity-30 hover:bg-zinc-800 transition"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1.5">
+                <button onClick={() => handlePageChange(page - 1)} disabled={page <= 1} className="btn-icon" aria-label="Previous page">
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-                <span className="text-zinc-400 px-1">
-                  {page}/{pagination.totalPages || 1}
+                <span className="px-2 font-mono text-zinc-200">
+                  {page} / {pagination.totalPages || 1}
                 </span>
-                <button
-                  onClick={() => handlePageChange(page + 1)}
-                  disabled={page >= pagination.totalPages}
-                  className="p-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 disabled:opacity-30 hover:bg-zinc-800 transition"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
+                <button onClick={() => handlePageChange(page + 1)} disabled={page >= pagination.totalPages} className="btn-icon" aria-label="Next page">
+                  <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
             </div>
           </>
-        ) : (
-          <div className="py-12 text-center text-zinc-600">
-            <Database className="w-6 h-6 mx-auto mb-2 text-zinc-700" />
-            <p className="text-xs">No DNC numbers found.</p>
-            <p className="text-[10px] text-zinc-700 mt-1">Upload a DNC file or add numbers individually.</p>
-          </div>
         )}
-      </div>
+      </section>
 
-      {/* MODAL: BULK DNC UPLOAD */}
+      {/* Upload modal */}
       <Modal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
-        title="Upload DNC File"
+        title="Upload DNC list"
+        description="CSV, Excel or TXT. Numbers are normalized and de-duplicated automatically."
       >
         <form onSubmit={handleUploadSubmit} className="space-y-4">
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border border-dashed border-zinc-700 hover:border-zinc-500 bg-zinc-900/30 rounded-xl p-5 text-center cursor-pointer transition"
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && fileInputRef.current?.click()}
+            className={`cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-colors ${
+              uploadFile ? 'border-emerald-800/60 bg-emerald-950/10' : 'border-surface-border-strong bg-surface-raised/40 hover:border-zinc-600'
+            }`}
           >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={(e) => e.target.files && setUploadFile(e.target.files[0])}
-              accept=".csv,.xlsx,.xls,.txt"
-              className="hidden"
-            />
-            <UploadCloud className="w-6 h-6 text-zinc-400 mx-auto mb-2" />
+            <input type="file" ref={fileInputRef} onChange={(e) => e.target.files && setUploadFile(e.target.files[0])} accept=".csv,.xlsx,.xls,.txt" className="hidden" />
+            <UploadCloud className={`mx-auto mb-2 h-6 w-6 ${uploadFile ? 'text-emerald-400' : 'text-zinc-400'}`} />
             {uploadFile ? (
-              <div>
-                <span className="text-xs font-semibold text-white block">{uploadFile.name}</span>
-                <span className="text-[10px] text-zinc-500 font-mono">
-                  {(uploadFile.size / 1024).toFixed(1)} KB
-                </span>
-              </div>
+              <>
+                <p className="text-sm font-semibold text-white">{uploadFile.name}</p>
+                <p className="font-mono text-[11px] text-zinc-500">{(uploadFile.size / 1024).toFixed(1)} KB</p>
+              </>
             ) : (
-              <div>
-                <span className="text-xs text-zinc-300 block">
-                  Click to select CSV, Excel, or TXT file
-                </span>
-                <span className="text-[10px] text-zinc-600">
-                  Numbers will be deduplicated automatically
-                </span>
-              </div>
+              <>
+                <p className="text-sm text-zinc-200">Click to select a file</p>
+                <p className="text-[11px] text-zinc-500">The phone column is detected automatically</p>
+              </>
             )}
           </div>
 
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">List Name</label>
-            <input
-              type="text"
-              value={campaignName}
-              onChange={(e) => setCampaignName(e.target.value)}
-              placeholder="e.g. National_DNC_Update"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-zinc-600"
-            />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor="campaignName" className="label">List name</label>
+              <input id="campaignName" type="text" value={campaignName} onChange={(e) => setCampaignName(e.target.value)} placeholder="e.g. National_DNC_Update" className="input" />
+            </div>
+            <div>
+              <label htmlFor="uploadNotes" className="label">Notes (optional)</label>
+              <input id="uploadNotes" type="text" value={uploadNotes} onChange={(e) => setUploadNotes(e.target.value)} placeholder="e.g. Added by compliance team" className="input" />
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-zinc-400 mb-1">Notes (optional)</label>
-            <input
-              type="text"
-              value={uploadNotes}
-              onChange={(e) => setUploadNotes(e.target.value)}
-              placeholder="e.g. Added by compliance team"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-zinc-600"
-            />
-          </div>
-
-          {/* Real-time Progress Bar & Status */}
           {uploading && (
-            <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2.5">
+            <div className="card-raised space-y-2.5 p-4">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-300 font-medium flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  {uploadPhase === 'processing'
-                    ? 'Importing & deduplicating into Master DNC...'
-                    : `Uploading file... ${uploadProgress}%`}
+                <span className="flex items-center gap-2 font-medium text-zinc-200">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                  {uploadPhase === 'processing' ? 'Importing and de-duplicating…' : 'Uploading file…'}
                 </span>
-                <span className="text-emerald-400 font-bold font-mono">
-                  {uploadProgress}%
-                </span>
+                <span className="font-mono font-semibold text-emerald-300">{uploadProgress}%</span>
               </div>
-              <div className="w-full h-2.5 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-                <div
-                  className="h-full bg-emerald-500 rounded-full transition-all duration-200"
-                  style={{ width: `${Math.max(5, uploadProgress)}%` }}
-                />
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-page">
+                <div className="h-full rounded-full bg-emerald-500 transition-all duration-200" style={{ width: `${Math.max(4, uploadProgress)}%` }} />
               </div>
-              <p className="text-[11px] text-zinc-500">
-                {uploadPhase === 'processing'
-                  ? 'Fast-indexing phone numbers and removing duplicates...'
-                  : 'Transferring file to server...'}
-              </p>
             </div>
           )}
 
           {uploadError && (
-            <div className="p-3 rounded-lg bg-red-950/40 border border-red-900/40 text-red-300 text-xs">
-              {uploadError}
+            <div className="alert-error" role="alert">
+              <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+              <span>{uploadError}</span>
             </div>
           )}
 
           {uploadResult && (
-            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-900/40 text-emerald-300 text-xs space-y-2">
-              <div className="flex items-center justify-between pb-1 border-b border-emerald-900/40">
-                <span className="font-bold text-white text-xs">Upload & Ingestion Complete!</span>
-                <span className="px-2 py-0.5 rounded bg-emerald-900/60 text-emerald-200 font-mono text-[10px]">
-                  100% Processed
-                </span>
+            <div className="alert-success flex-col !items-stretch gap-3">
+              <div className="flex items-center gap-2 font-semibold text-white">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" /> Import complete
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="p-2 rounded bg-zinc-950/60 border border-emerald-900/30">
-                  <span className="text-zinc-400 block text-[10px]">New DNC Added</span>
-                  <span className="text-emerald-400 font-bold font-mono text-sm">
-                    {uploadResult.addedNew.toLocaleString()}
-                  </span>
-                </div>
-                <div className="p-2 rounded bg-zinc-950/60 border border-emerald-900/30">
-                  <span className="text-zinc-400 block text-[10px]">Duplicates / Existing</span>
-                  <span className="text-zinc-300 font-bold font-mono text-sm">
-                    {uploadResult.duplicatesOrExisting.toLocaleString()}
-                  </span>
-                </div>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  ['New added', uploadResult.addedNew, 'text-emerald-300'],
+                  ['Already existed', uploadResult.duplicatesOrExisting, 'text-zinc-200'],
+                  ['Invalid', uploadResult.invalidCount, 'text-zinc-400'],
+                ].map(([l, v, c]) => (
+                  <div key={l} className="rounded-lg border border-emerald-900/40 bg-surface-page/60 p-2.5">
+                    <span className="block text-[10px] text-zinc-500">{l}</span>
+                    <span className={`font-mono text-base font-bold ${c}`}>{formatNumber(v)}</span>
+                  </div>
+                ))}
               </div>
-              <div className="text-[11px] text-zinc-400 flex justify-between pt-1">
-                <span>Total rows evaluated:</span>
-                <span className="text-white font-mono">{uploadResult.totalRows.toLocaleString()}</span>
-              </div>
+              <p className="text-[11px] text-zinc-400">
+                Rows evaluated: <span className="font-mono text-zinc-200">{formatNumber(uploadResult.totalRows)}</span>
+              </p>
             </div>
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                setIsUploadModalOpen(false);
-                setUploadProgress(0);
-                setUploadPhase('idle');
-                setUploadError(null);
-                setUploadResult(null);
-              }}
-              className="px-4 py-2 rounded-lg bg-zinc-900 text-zinc-400 text-xs font-medium hover:bg-zinc-800 transition cursor-pointer"
-            >
-              {uploadResult ? 'Done' : 'Close'}
+            <button type="button" onClick={() => setIsUploadModalOpen(false)} className="btn-secondary">
+              {uploadResult ? 'Done' : 'Cancel'}
             </button>
-            <button
-              type="submit"
-              disabled={!uploadFile || uploading}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40 transition cursor-pointer"
-            >
+            <button type="submit" disabled={!uploadFile || uploading} className="btn-primary">
               {uploading ? (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>{uploadProgress < 100 ? `Uploading (${uploadProgress}%)` : 'Importing...'}</span>
+                  <Loader2 className="h-4 w-4 animate-spin" /> {uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Importing…'}
                 </>
               ) : (
-                'Upload & Import'
+                <>
+                  <UploadCloud className="h-4 w-4" /> Upload & import
+                </>
               )}
             </button>
           </div>
         </form>
       </Modal>
 
-      {/* MODAL: ADD SINGLE NUMBER */}
-      <Modal
-        isOpen={isSingleModalOpen}
-        onClose={() => setIsSingleModalOpen(false)}
-        title="Add DNC Number"
-      >
+      {/* Single-number modal */}
+      <Modal isOpen={isSingleModalOpen} onClose={() => setIsSingleModalOpen(false)} title="Add a DNC number" size="sm">
         <form onSubmit={handleSingleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Phone Number *</label>
-            <input
-              type="text"
-              value={singlePhone}
-              onChange={(e) => setSinglePhone(e.target.value)}
-              placeholder="e.g. 555-123-4567"
-              required
-              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-zinc-600 font-mono"
-            />
+            <label htmlFor="singlePhone" className="label">Phone number</label>
+            <input id="singlePhone" type="tel" value={singlePhone} onChange={(e) => setSinglePhone(e.target.value)} placeholder="e.g. (555) 123-4567" required className="input font-mono" />
           </div>
-
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Source / Reason</label>
-            <input
-              type="text"
-              value={singleCampaign}
-              onChange={(e) => setSingleCampaign(e.target.value)}
-              placeholder="e.g. Customer Opt-Out"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-zinc-600"
-            />
+            <label htmlFor="singleCampaign" className="label">Source / reason</label>
+            <input id="singleCampaign" type="text" value={singleCampaign} onChange={(e) => setSingleCampaign(e.target.value)} placeholder="e.g. Customer opt-out" className="input" />
           </div>
-
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Notes (optional)</label>
-            <input
-              type="text"
-              value={singleNotes}
-              onChange={(e) => setSingleNotes(e.target.value)}
-              placeholder="e.g. Call center request"
-              className="w-full px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-white text-xs focus:outline-none focus:border-zinc-600"
-            />
+            <label htmlFor="singleNotes" className="label">Notes (optional)</label>
+            <input id="singleNotes" type="text" value={singleNotes} onChange={(e) => setSingleNotes(e.target.value)} placeholder="e.g. Call center request" className="input" />
           </div>
 
           {singleError && (
-            <div className="p-3 rounded-lg bg-red-950/40 border border-red-900/40 text-red-300 text-xs">
-              {singleError}
+            <div className="alert-error" role="alert">
+              <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+              <span>{singleError}</span>
             </div>
           )}
 
           <div className="flex justify-end gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => setIsSingleModalOpen(false)}
-              className="px-4 py-2 rounded-lg bg-zinc-900 text-zinc-400 text-xs font-medium hover:bg-zinc-800 transition"
-            >
+            <button type="button" onClick={() => setIsSingleModalOpen(false)} className="btn-secondary">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={singleSubmitting}
-              className="px-5 py-2 rounded-lg bg-white hover:bg-zinc-200 text-black text-xs font-bold disabled:opacity-40 transition"
-            >
-              {singleSubmitting ? 'Saving...' : 'Add Number'}
+            <button type="submit" disabled={singleSubmitting} className="btn-primary">
+              {singleSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add number
             </button>
           </div>
         </form>

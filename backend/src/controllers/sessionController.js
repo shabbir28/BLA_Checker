@@ -36,11 +36,19 @@ export async function previewLeadFile(req, res) {
 export async function startLeadSession(req, res) {
   const { tempFileId, sessionName, phoneColumn, originalFilename } = req.body;
 
-  if (!tempFileId) {
+  if (!tempFileId || typeof tempFileId !== 'string') {
     return res.status(400).json({ message: 'Uploaded file reference (tempFileId) is required.' });
   }
 
-  const filePath = path.join(UPLOADS_DIR, tempFileId);
+  // Only accept the bare filename multer generated for a lead preview; reject anything
+  // that could escape the uploads directory or point at a non-lead file.
+  const safeFileId = path.basename(tempFileId);
+  const filePath = path.resolve(UPLOADS_DIR, safeFileId);
+  const isInsideUploads = filePath.startsWith(path.resolve(UPLOADS_DIR) + path.sep);
+  if (safeFileId !== tempFileId || !safeFileId.startsWith('lead-') || !isInsideUploads) {
+    return res.status(400).json({ message: 'Invalid uploaded file reference.' });
+  }
+
   if (!fs.existsSync(filePath)) {
     return res.status(400).json({ message: 'Uploaded file has expired or was not found on server.' });
   }

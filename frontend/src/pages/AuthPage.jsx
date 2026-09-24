@@ -1,17 +1,44 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
+import {
+  ShieldCheck,
+  Mail,
+  Lock,
+  ArrowRight,
+  AlertCircle,
+  Eye,
+  EyeOff,
+  Database,
+  Zap,
+  FileCheck2,
+  Loader2,
+} from 'lucide-react';
+
+const FEATURES = [
+  {
+    icon: Database,
+    title: 'Local DNC pre-match',
+    text: 'Every number is checked against your Master DNC first, so known numbers never hit the paid API.',
+  },
+  {
+    icon: Zap,
+    title: 'Blacklist Alliance verification',
+    text: 'Fresh numbers are verified live in batches, with results synced back into your DNC list automatically.',
+  },
+  {
+    icon: FileCheck2,
+    title: 'Audit-ready exports',
+    text: 'Download clean lists or the full per-number report as CSV or Excel, with a complete activity log.',
+  },
+];
 
 export function AuthPage() {
-  const { login, register } = useAuth();
-  const [isRegister, setIsRegister] = useState(false);
+  const { login } = useAuth();
 
-  // Form Fields
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
-  // States
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -20,11 +47,7 @@ export function AuthPage() {
     try {
       setLoading(true);
       setError(null);
-      if (isRegister) {
-        await register(email, password, name);
-      } else {
-        await login(email, password);
-      }
+      await login(email.trim(), password);
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid email or password. Please try again.');
     } finally {
@@ -33,123 +56,147 @@ export function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 bg-black-dots selection:bg-white selection:text-black">
-      <div className="w-full max-w-md">
-        {/* App Logo & Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 text-white mb-4 shadow-xl shadow-black/80">
-            <ShieldCheck className="w-7 h-7 text-emerald-400" />
+    <div className="min-h-screen bg-surface-page text-white grid grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
+      {/* ---------- Left: Branding panel ---------- */}
+      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden border-r border-surface-border bg-black-dots">
+        <div className="absolute inset-0 bg-glow pointer-events-none" />
+
+        <div className="relative z-10 p-10 xl:p-14">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-black shadow-lg shadow-white/10">
+              <ShieldCheck className="h-5 w-5" strokeWidth={2.4} />
+            </div>
+            <div className="leading-tight">
+              <span className="block text-base font-bold tracking-tight">BLA Checker</span>
+              <span className="block text-[11px] font-medium text-zinc-500">DNC Compliance Platform</span>
+            </div>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">BLA Checker</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            {isRegister ? 'Create an account to start checking leads' : 'Sign in to check and scrub phone numbers'}
-          </p>
         </div>
 
-        {/* Auth Card */}
-        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/90">
+        <div className="relative z-10 px-10 xl:px-14 pb-10 xl:pb-14 max-w-xl">
+          <span className="eyebrow">Lead scrubbing, done right</span>
+          <h1 className="mt-3 text-4xl xl:text-[2.75rem] font-bold leading-[1.1] tracking-tight">
+            Verify every number
+            <span className="block text-zinc-400">before you dial.</span>
+          </h1>
+          <p className="mt-4 text-sm text-zinc-400 leading-relaxed">
+            A three-phase pipeline that removes DNC numbers, cuts API spend, and keeps a complete audit trail for
+            compliance.
+          </p>
 
-          {/* Error Message */}
+          <ul className="mt-9 space-y-5">
+            {FEATURES.map((f) => {
+              const Icon = f.icon;
+              return (
+                <li key={f.title} className="flex items-start gap-4">
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-surface-border bg-surface-raised text-emerald-400">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">{f.title}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500 leading-relaxed">{f.text}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+
+        <div className="relative z-10 flex items-center justify-between border-t border-surface-border px-10 xl:px-14 py-5 text-[11px] text-zinc-600">
+          <span>© {new Date().getFullYear()} BLA Checker</span>
+          <span className="font-mono">v1.0.0</span>
+        </div>
+      </aside>
+
+      {/* ---------- Right: Form ---------- */}
+      <main className="flex flex-col justify-center px-5 py-10 sm:px-10">
+        {/* Mobile brand header */}
+        <div className="mb-8 flex items-center gap-3 lg:hidden">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-black">
+            <ShieldCheck className="h-5 w-5" strokeWidth={2.4} />
+          </div>
+          <div className="leading-tight">
+            <span className="block text-sm font-bold">BLA Checker</span>
+            <span className="block text-[11px] text-zinc-500">DNC Compliance Platform</span>
+          </div>
+        </div>
+
+        <div className="mx-auto w-full max-w-[400px] animate-fade-in-up">
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
+            <p className="mt-1.5 text-sm text-zinc-400">Sign in to check and scrub phone numbers.</p>
+          </div>
+
           {error && (
-            <div className="mb-5 p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+            <div className="alert-error mb-5" role="alert">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-400 mt-px" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {isRegister && (
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1.5">Full Name</label>
-                <div className="relative">
-                  <User className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter your name"
-                    required
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-white text-sm focus:outline-none focus:border-white transition"
-                  />
-                </div>
-              </div>
-            )}
-
+          <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Email Address</label>
+              <label htmlFor="email" className="label">Email address</label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
+                  id="email"
                   type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
+                  placeholder="name@company.com"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-white text-sm focus:outline-none focus:border-white transition"
+                  className="input input-with-icon"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1.5">Password</label>
+              <label htmlFor="password" className="label">Password</label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                 <input
-                  type="password"
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-white text-sm focus:outline-none focus:border-white transition"
+                  className="input input-with-icon pr-11"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-zinc-500 transition hover:bg-surface-hover hover:text-zinc-200"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full mt-2 flex items-center justify-center gap-2 py-3 rounded-xl bg-white hover:bg-zinc-200 text-black font-semibold text-sm transition disabled:opacity-50 cursor-pointer shadow-lg shadow-white/10"
-            >
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-2">
               {loading ? (
-                <span>Please wait...</span>
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Signing in…</span>
+                </>
               ) : (
                 <>
-                  <span>{isRegister ? 'Create Account' : 'Sign In'}</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>Sign in</span>
+                  <ArrowRight className="h-4 w-4" />
                 </>
               )}
             </button>
           </form>
 
-          {/* Toggle Register/Sign In */}
-          <div className="mt-6 text-center pt-4 border-t border-zinc-900">
-            <button
-              type="button"
-              onClick={() => {
-                setIsRegister(!isRegister);
-                setError(null);
-              }}
-              className="text-xs text-zinc-400 hover:text-white transition"
-            >
-              {isRegister ? (
-                <span>
-                  Already have an account? <span className="text-white font-medium underline">Sign In</span>
-                </span>
-              ) : (
-                <span>
-                  Don't have an account? <span className="text-white font-medium underline">Register</span>
-                </span>
-              )}
-            </button>
-          </div>
+          <p className="mt-8 text-center text-[11px] text-zinc-600">
+            Accounts are created by your administrator. Activity is logged for compliance.
+          </p>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-[11px] text-zinc-600 mt-6 font-mono">
-          BLA Checker · True Black DNC Verification
-        </p>
-      </div>
+      </main>
     </div>
   );
 }

@@ -45,13 +45,13 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
     }
   };
 
+  // The effect below reacts to dateRange, so the handler only needs to update state.
   useEffect(() => {
     fetchUserSessions(dateRange);
   }, [dateRange]);
 
   const handleDateRangeChange = (newRange) => {
     setDateRange(newRange);
-    fetchUserSessions(newRange);
   };
 
   // Filter sessions according to selected range
@@ -146,7 +146,7 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
             <p className="text-xs text-zinc-400">Download your clean phone numbers</p>
           </div>
           <button
-            onClick={fetchUserSessions}
+            onClick={() => fetchUserSessions(dateRange)}
             className="text-xs text-zinc-400 hover:text-white transition"
           >
             Refresh List
