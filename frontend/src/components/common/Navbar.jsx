@@ -1,14 +1,13 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldCheck, LogOut, UploadCloud, Menu, User as UserIcon } from 'lucide-react';
-import StatusBadge from './StatusBadge';
+import { LogOut, Menu, User as UserIcon } from 'lucide-react';
 
-export function Navbar({ onOpenNewScrub, onToggleSidebar, activeTab }) {
-  const { user, logout, isAdmin } = useAuth();
+export function Navbar({ onToggleSidebar, activeTab }) {
+  const { user, logout } = useAuth();
 
   const tabTitles = {
     dashboard: 'Dashboard',
-    leads: 'Upload File',
+    leads: 'Upload Files',
     sessions: 'Sessions',
     dnc: 'DNC Upload',
     users: 'Users',
@@ -46,7 +45,7 @@ export function Navbar({ onOpenNewScrub, onToggleSidebar, activeTab }) {
           <button
             onClick={logout}
             title="Sign Out"
-            className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-zinc-900 rounded-lg transition ml-1"
+            className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-zinc-900 rounded-lg transition ml-1 cursor-pointer"
           >
             <LogOut className="w-4 h-4" />
           </button>

@@ -9,18 +9,22 @@ import {
   ShieldCheck,
   ChevronRight,
   X,
-  PiggyBank,
+  LogOut,
 } from 'lucide-react';
 
 export function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
-  const { isAdmin } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
 
-  const primaryNav = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'leads', label: 'Upload File', icon: UploadCloud },
-    { id: 'sessions', label: 'Sessions', icon: Layers },
-    { id: 'dnc', label: 'DNC Upload', icon: Database },
-  ];
+  const primaryNav = isAdmin
+    ? [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'leads', label: 'Upload Files', icon: UploadCloud },
+        { id: 'sessions', label: 'Sessions', icon: Layers },
+        { id: 'dnc', label: 'DNC Upload', icon: Database },
+      ]
+    : [
+        { id: 'leads', label: 'Upload Files', icon: UploadCloud },
+      ];
 
   const adminNav = [
     { id: 'users', label: 'Users', icon: Users },
@@ -133,15 +137,27 @@ export function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
           )}
         </div>
 
-        {/* Bottom Callout: Automatic Savings */}
-        <div className="p-4 m-3 rounded-xl bg-zinc-950 border border-zinc-800/80">
-          <div className="flex items-center gap-2 mb-1.5 text-emerald-400 text-xs font-semibold">
-            <PiggyBank className="w-4 h-4" />
-            <span>Automatic Cost Savings</span>
+        {/* Bottom Section: User Info & Logout */}
+        <div className="p-3 mt-auto border-t border-zinc-800/80 bg-black">
+          <div className="flex items-center justify-between p-2 rounded-xl bg-zinc-950 border border-zinc-800/70 mb-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-7 h-7 shrink-0 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center text-white text-xs font-bold">
+                {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-zinc-200 truncate">{user?.name || user?.email}</p>
+                <p className="text-[10px] text-zinc-500 capitalize">{user?.role || 'User'}</p>
+              </div>
+            </div>
           </div>
-          <p className="text-[11px] text-zinc-400 leading-relaxed">
-            Numbers already in your DNC database are filtered out for free before calling the BLA API.
-          </p>
+
+          <button
+            onClick={logout}
+            className="w-full flex items-center justify-center gap-2.5 px-3 py-2.5 rounded-xl text-xs md:text-sm font-medium text-zinc-300 hover:text-red-400 hover:bg-red-500/10 border border-zinc-800 hover:border-red-500/30 transition cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-zinc-400" />
+            <span>Logout</span>
+          </button>
         </div>
       </aside>
     </>

@@ -11,7 +11,6 @@ import {
   RefreshCw,
   Download,
   ExternalLink,
-  FileSpreadsheet,
   AlertTriangle,
   Zap,
 } from 'lucide-react';
@@ -29,7 +28,7 @@ import {
   Legend,
 } from 'recharts';
 
-export function AdminDashboard({ onSelectSession }) {
+export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -37,12 +36,14 @@ export function AdminDashboard({ onSelectSession }) {
 
   // Initialize with Today matching Image 2
   const [dateRange, setDateRange] = useState(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
     return {
       id: 'today',
       label: 'Today',
-      startDate: `${today}T00:00:00.000Z`,
-      endDate: `${today}T23:59:59.999Z`,
+      startDate: start,
+      endDate: end,
     };
   });
 
@@ -388,8 +389,8 @@ export function AdminDashboard({ onSelectSession }) {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" className="py-8 text-center text-zinc-500 font-sans">
-                    No lead files checked yet. Click "Upload File" above to get started.
+                  <td colSpan="8" className="py-8 text-center text-zinc-500 font-sans">
+                    No lead files found for this period. Click "Upload File" in the sidebar to get started.
                   </td>
                 </tr>
               )}

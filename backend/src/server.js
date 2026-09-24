@@ -13,17 +13,12 @@ import dncRoutes from './routes/dncRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import { pool } from './config/db.js';
+import { UPLOADS_DIR } from './config/uploads.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Ensure uploads folder exists
-const uploadsDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
 
 const app = express();
 const PORT = process.env.PORT || 5000;

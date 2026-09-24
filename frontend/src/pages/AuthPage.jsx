@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Mail, Lock, User, ArrowRight, AlertCircle, Check } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, User, ArrowRight, AlertCircle } from 'lucide-react';
 
 export function AuthPage() {
   const { login, register } = useAuth();
@@ -32,13 +32,6 @@ export function AuthPage() {
     }
   };
 
-  const handleQuickLogin = (demoEmail, demoPassword) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setIsRegister(false);
-    setError(null);
-  };
-
   return (
     <div className="min-h-screen bg-black text-white flex flex-col justify-center items-center p-4 bg-black-dots selection:bg-white selection:text-black">
       <div className="w-full max-w-md">
@@ -55,47 +48,6 @@ export function AuthPage() {
 
         {/* Auth Card */}
         <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/90">
-          {/* Quick Demo Login Buttons */}
-          {!isRegister && (
-            <div className="mb-6 pb-6 border-b border-zinc-800/80">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block mb-2.5 text-center">
-                One-Click Quick Login
-              </span>
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('admin@blachecker.com', 'Admin123!')}
-                  className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                    email === 'admin@blachecker.com'
-                      ? 'bg-zinc-900 border-white text-white'
-                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white">Admin Demo</span>
-                    {email === 'admin@blachecker.com' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                  </div>
-                  <span className="text-[10px] text-zinc-400 mt-1 font-mono truncate">admin@blachecker.com</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin('user@blachecker.com', 'User123!')}
-                  className={`p-3 rounded-xl border text-left transition flex flex-col justify-between ${
-                    email === 'user@blachecker.com'
-                      ? 'bg-zinc-900 border-white text-white'
-                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white">User Demo</span>
-                    {email === 'user@blachecker.com' && <Check className="w-3.5 h-3.5 text-emerald-400" />}
-                  </div>
-                  <span className="text-[10px] text-zinc-400 mt-1 font-mono truncate">user@blachecker.com</span>
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Error Message */}
           {error && (

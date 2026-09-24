@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import xlsx from 'xlsx';
 import { query } from '../config/db.js';
 import scrubbingEngine from '../services/scrubbingEngine.js';
+import { UPLOADS_DIR } from '../config/uploads.js';
 
 export async function previewLeadFile(req, res) {
   if (!req.file) {
@@ -39,7 +40,7 @@ export async function startLeadSession(req, res) {
     return res.status(400).json({ message: 'Uploaded file reference (tempFileId) is required.' });
   }
 
-  const filePath = path.join('uploads', tempFileId);
+  const filePath = path.join(UPLOADS_DIR, tempFileId);
   if (!fs.existsSync(filePath)) {
     return res.status(400).json({ message: 'Uploaded file has expired or was not found on server.' });
   }
@@ -84,29 +85,46 @@ export async function listSessions(req, res) {
     const page = parseInt(req.query.page || '1', 10);
     const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
     const offset = (page - 1) * limit;
+    const { startDate, endDate } = req.query;
 
     const isAdmin = req.user.role === 'admin';
     const scopeAll = isAdmin && req.query.scope === 'all';
 
-    let countSql = 'SELECT COUNT(*) as total FROM checking_sessions';
-    let dataSql = `
-      SELECT s.*, u.name as user_name, u.email as user_email
-      FROM checking_sessions s
-      LEFT JOIN users u ON s.user_id = u.id
-    `;
+    const whereClauses = [];
     const params = [];
 
     if (!scopeAll) {
       params.push(req.user.id);
-      countSql += ' WHERE user_id = $1';
-      dataSql += ' WHERE s.user_id = $1';
+      whereClauses.push(`s.user_id = $${params.length}`);
     }
 
-    const countRes = await query(countSql, params);
+    if (startDate) {
+      params.push(startDate);
+      whereClauses.push(`s.created_at >= $${params.length}`);
+    }
+
+    if (endDate) {
+      params.push(endDate);
+      whereClauses.push(`s.created_at <= $${params.length}`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const countWhereSql = whereClauses.length > 0
+      ? `WHERE ${whereClauses.map((w) => w.replace(/^s\./, '')).join(' AND ')}`
+      : '';
+
+    const countRes = await query(`SELECT COUNT(*) as total FROM checking_sessions ${countWhereSql}`, params);
     const total = parseInt(countRes.rows[0].total, 10);
 
     const dataParams = [...params, limit, offset];
-    dataSql += ` ORDER BY s.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`;
+    const dataSql = `
+      SELECT s.*, u.name as user_name, u.email as user_email
+      FROM checking_sessions s
+      LEFT JOIN users u ON s.user_id = u.id
+      ${whereSql}
+      ORDER BY s.created_at DESC
+      LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}
+    `;
     const dataRes = await query(dataSql, dataParams);
 
     return res.json({

@@ -17,14 +17,13 @@ import {
   ShieldAlert,
   ChevronLeft,
   ChevronRight,
-  Filter,
   AlertTriangle,
   Clock,
   User,
 } from 'lucide-react';
 
 export function SessionsView({ onSelectSession, onOpenNewScrub }) {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin } = useAuth();
 
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +123,6 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
   const totalClean = sessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
   const totalLocalDnc = sessions.reduce((acc, s) => acc + (s.local_dnc_count || 0), 0);
   const totalBlaDnc = sessions.reduce((acc, s) => acc + (s.bla_dnc_count || 0), 0);
-  const totalDnc = totalLocalDnc + totalBlaDnc;
 
   const formatDate = (dateString) => {
     if (!dateString) return '—';

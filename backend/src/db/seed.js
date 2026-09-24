@@ -56,7 +56,7 @@ export async function runSeeds() {
     `, [adminId, JSON.stringify({ message: 'BLA Checker initialized with seeded Master DNC entries and system accounts' })]);
 
     await client.query('COMMIT');
-    console.log(`[SEED] Seeding completed! Seeded users, API config, and ${counter} master DNC records.`);
+    console.log('[SEED] Seeding completed! Seeded users and API config successfully.');
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('[SEED] Seeding failed:', error);

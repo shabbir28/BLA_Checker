@@ -7,25 +7,25 @@ import DateRangeSelector from '../common/DateRangeSelector';
 import {
   FileCheck,
   ShieldCheck,
-  ShieldAlert,
   Download,
   ExternalLink,
-  FileSpreadsheet,
   Zap,
   Database,
   RefreshCw,
 } from 'lucide-react';
 
-export function UserDashboard({ onSelectSession }) {
+export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dateRange, setDateRange] = useState(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
     return {
       id: 'today',
       label: 'Today',
-      startDate: `${today}T00:00:00.000Z`,
-      endDate: `${today}T23:59:59.999Z`,
+      startDate: start,
+      endDate: end,
     };
   });
 
@@ -63,13 +63,10 @@ export function UserDashboard({ onSelectSession }) {
     return sessionTime >= startTime && sessionTime <= endTime;
   });
 
-  const displaySessions = filteredSessions.length > 0 ? filteredSessions : sessions;
-
-  const totalLeads = displaySessions.reduce((acc, s) => acc + (s.total_rows || 0), 0);
-  const totalClean = displaySessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
-  const totalLocalDnc = displaySessions.reduce((acc, s) => acc + (s.local_dnc_count || 0), 0);
-  const totalBlaDnc = displaySessions.reduce((acc, s) => acc + (s.bla_dnc_count || 0), 0);
-  const totalBlaChecked = displaySessions.reduce(
+  const totalLeads = filteredSessions.reduce((acc, s) => acc + (s.total_rows || 0), 0);
+  const totalClean = filteredSessions.reduce((acc, s) => acc + (s.clean_count || 0), 0);
+  const totalLocalDnc = filteredSessions.reduce((acc, s) => acc + (s.local_dnc_count || 0), 0);
+  const totalBlaChecked = filteredSessions.reduce(
     (acc, s) => acc + (s.clean_count || 0) + (s.bla_dnc_count || 0),
     0
   );
@@ -158,7 +155,7 @@ export function UserDashboard({ onSelectSession }) {
 
         {loading ? (
           <LoadingSpinner message="Loading files..." />
-        ) : sessions.length > 0 ? (
+        ) : filteredSessions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="text-[11px] uppercase tracking-wider text-zinc-400 border-b border-zinc-800 bg-zinc-900/40">
@@ -174,7 +171,7 @@ export function UserDashboard({ onSelectSession }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800/80 font-mono">
-                {sessions.map((session) => (
+                {filteredSessions.map((session) => (
                   <tr key={session.id} className="hover:bg-zinc-900/50 transition">
                     <td className="py-3 pl-3 font-sans font-medium text-white">
                       <div>
@@ -244,12 +241,16 @@ export function UserDashboard({ onSelectSession }) {
           </div>
         ) : (
           <div className="py-12 text-center text-zinc-500">
-            <p className="text-sm">You haven't checked any files yet.</p>
+            <p className="text-sm">
+              {sessions.length === 0
+                ? "You haven't checked any files yet."
+                : `No files found for ${dateRange.label}.`}
+            </p>
             <button
               onClick={onOpenNewScrub}
               className="mt-3 px-4 py-2 bg-white text-black hover:bg-zinc-200 rounded-xl text-xs font-bold transition"
             >
-              Upload Your First File
+              Upload a File
             </button>
           </div>
         )}

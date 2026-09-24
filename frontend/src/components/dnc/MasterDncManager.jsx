@@ -462,9 +462,9 @@ export function MasterDncManager() {
               <div className="flex items-center justify-between text-xs">
                 <span className="text-zinc-300 font-medium flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  {uploadProgress < 100
-                    ? `Uploading file... ${uploadProgress}%`
-                    : 'Importing & deduplicating into Master DNC...'}
+                  {uploadPhase === 'processing'
+                    ? 'Importing & deduplicating into Master DNC...'
+                    : `Uploading file... ${uploadProgress}%`}
                 </span>
                 <span className="text-emerald-400 font-bold font-mono">
                   {uploadProgress}%
@@ -477,9 +477,9 @@ export function MasterDncManager() {
                 />
               </div>
               <p className="text-[11px] text-zinc-500">
-                {uploadProgress < 100
-                  ? 'Transferring file to server...'
-                  : 'Fast-indexing phone numbers and removing duplicates...'}
+                {uploadPhase === 'processing'
+                  ? 'Fast-indexing phone numbers and removing duplicates...'
+                  : 'Transferring file to server...'}
               </p>
             </div>
           )}

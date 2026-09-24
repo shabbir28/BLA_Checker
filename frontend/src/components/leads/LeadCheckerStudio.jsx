@@ -4,7 +4,6 @@ import { sessionApi } from '../../services/api';
 import StatusBadge from '../common/StatusBadge';
 import {
   UploadCloud,
-  FileCheck,
   CheckCircle2,
   AlertCircle,
   Download,
@@ -113,7 +112,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             setCurrentStep(4);
             try {
               confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
-            } catch (e) {}
+            } catch {}
             if (onScrubComplete) onScrubComplete(updated);
           } else if (updated.status === 'FAILED') {
             clearInterval(interval);

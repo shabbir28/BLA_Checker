@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { sessionApi } from '../../services/api';
 import StatusBadge from '../common/StatusBadge';
 import LoadingSpinner from '../common/LoadingSpinner';
@@ -26,32 +26,35 @@ export function SessionDetails({ sessionId, onBack }) {
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [deleting, setDeleting] = useState(false);
 
-  const fetchSession = async () => {
+  const fetchSession = useCallback(async () => {
     try {
       const res = await sessionApi.get(sessionId);
       setSession(res.data.session);
     } catch (err) {
       console.error('[SESSION DETAILS] Fetch session error:', err);
     }
-  };
+  }, [sessionId]);
 
-  const fetchRecords = async (targetPage = page, targetStatus = statusFilter, targetSearch = searchTerm) => {
-    try {
-      setRecordsLoading(true);
-      const res = await sessionApi.getRecords(sessionId, {
-        page: targetPage,
-        limit: 50,
-        status: targetStatus,
-        search: targetSearch,
-      });
-      setRecords(res.data.data || []);
-      setPagination(res.data.pagination);
-    } catch (err) {
-      console.error('[SESSION DETAILS] Fetch records error:', err);
-    } finally {
-      setRecordsLoading(false);
-    }
-  };
+  const fetchRecords = useCallback(
+    async (targetPage = page, targetStatus = statusFilter, targetSearch = searchTerm) => {
+      try {
+        setRecordsLoading(true);
+        const res = await sessionApi.getRecords(sessionId, {
+          page: targetPage,
+          limit: 50,
+          status: targetStatus,
+          search: targetSearch,
+        });
+        setRecords(res.data.data || []);
+        setPagination(res.data.pagination);
+      } catch (err) {
+        console.error('[SESSION DETAILS] Fetch records error:', err);
+      } finally {
+        setRecordsLoading(false);
+      }
+    },
+    [sessionId, page, statusFilter, searchTerm]
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -61,7 +64,7 @@ export function SessionDetails({ sessionId, onBack }) {
       setLoading(false);
     }
     loadData();
-  }, [sessionId]);
+  }, [fetchSession, fetchRecords]);
 
   const handleFilterChange = (newStatus) => {
     setStatusFilter(newStatus);
@@ -251,7 +254,7 @@ export function SessionDetails({ sessionId, onBack }) {
           <input
             type="text"
             value={searchTerm}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search phone number..."
             className="w-full pl-9 pr-4 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-xs placeholder-zinc-500 focus:outline-none focus:border-white font-mono"
           />

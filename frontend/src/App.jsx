@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
@@ -16,9 +16,16 @@ import UserManagement from './components/admin/UserManagement';
 
 function MainApp() {
   const { user, loading, isAdmin } = useAuth();
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() => (isAdmin ? 'dashboard' : 'leads'));
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
+
+  // If a regular (non-admin) user is logged in, ensure they are strictly on 'leads' tab
+  useEffect(() => {
+    if (user && !isAdmin && activeTab !== 'leads') {
+      setActiveTab('leads');
+    }
+  }, [user, isAdmin, activeTab]);
 
   if (loading) {
     return (
@@ -64,18 +71,11 @@ function MainApp() {
         />
 
         <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full">
-          {activeTab === 'dashboard' && (
-            isAdmin ? (
-              <AdminDashboard
-                onSelectSession={handleSelectSession}
-                onOpenNewScrub={handleOpenNewScrub}
-              />
-            ) : (
-              <UserDashboard
-                onSelectSession={handleSelectSession}
-                onOpenNewScrub={handleOpenNewScrub}
-              />
-            )
+          {activeTab === 'dashboard' && isAdmin && (
+            <AdminDashboard
+              onSelectSession={handleSelectSession}
+              onOpenNewScrub={handleOpenNewScrub}
+            />
           )}
 
           {activeTab === 'leads' && (
@@ -94,14 +94,14 @@ function MainApp() {
             )
           )}
 
-          {activeTab === 'sessions' && (
+          {activeTab === 'sessions' && isAdmin && (
             <SessionsView
               onSelectSession={handleSelectSession}
               onOpenNewScrub={handleOpenNewScrub}
             />
           )}
 
-          {activeTab === 'dnc' && <MasterDncManager />}
+          {activeTab === 'dnc' && isAdmin && <MasterDncManager />}
 
           {activeTab === 'users' && isAdmin && <UserManagement />}
         </main>

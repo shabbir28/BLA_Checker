@@ -59,13 +59,17 @@ export function DateRangeSelector({ value, onChange }) {
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
     const lastMonthStr = `${formatDate(lastMonthStart)} – ${formatDate(lastMonthEnd)}`;
 
+    // Helpers to get local start and end of day as accurate ISO timestamps
+    const toStartIso = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).toISOString();
+    const toEndIso = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).toISOString();
+
     return {
-      today: { label: 'Today', dateString: todayStr, start: `${todayStr}T00:00:00.000Z`, end: `${todayStr}T23:59:59.999Z` },
-      yesterday: { label: 'Yesterday', dateString: yesterdayStr, start: `${yesterdayStr}T00:00:00.000Z`, end: `${yesterdayStr}T23:59:59.999Z` },
-      this_week: { label: 'This Week', dateString: thisWeekStr, start: `${formatDate(monday)}T00:00:00.000Z`, end: `${formatDate(sunday)}T23:59:59.999Z` },
-      last_week: { label: 'Last Week', dateString: lastWeekStr, start: `${formatDate(lastMonday)}T00:00:00.000Z`, end: `${formatDate(lastSunday)}T23:59:59.999Z` },
-      this_month: { label: 'This Month', dateString: thisMonthStr, start: `${formatDate(thisMonthStart)}T00:00:00.000Z`, end: `${formatDate(thisMonthEnd)}T23:59:59.999Z` },
-      last_month: { label: 'Last Month', dateString: lastMonthStr, start: `${formatDate(lastMonthStart)}T00:00:00.000Z`, end: `${formatDate(lastMonthEnd)}T23:59:59.999Z` },
+      today: { label: 'Today', dateString: todayStr, start: toStartIso(now), end: toEndIso(now) },
+      yesterday: { label: 'Yesterday', dateString: yesterdayStr, start: toStartIso(yesterday), end: toEndIso(yesterday) },
+      this_week: { label: 'This Week', dateString: thisWeekStr, start: toStartIso(monday), end: toEndIso(sunday) },
+      last_week: { label: 'Last Week', dateString: lastWeekStr, start: toStartIso(lastMonday), end: toEndIso(lastSunday) },
+      this_month: { label: 'This Month', dateString: thisMonthStr, start: toStartIso(thisMonthStart), end: toEndIso(thisMonthEnd) },
+      last_month: { label: 'Last Month', dateString: lastMonthStr, start: toStartIso(lastMonthStart), end: toEndIso(lastMonthEnd) },
     };
   };
 
@@ -84,7 +88,7 @@ export function DateRangeSelector({ value, onChange }) {
   const currentSelection = value?.id || 'today';
   const currentLabel =
     value?.id === 'custom'
-      ? `${value.startDate || 'Start'} – ${value.endDate || 'End'}`
+      ? `${value.startDate ? new Date(value.startDate).toLocaleDateString() : 'Start'} – ${value.endDate ? new Date(value.endDate).toLocaleDateString() : 'End'}`
       : options.find((o) => o.id === currentSelection)?.label || 'Today';
 
   const handleSelect = (opt) => {
@@ -110,11 +114,13 @@ export function DateRangeSelector({ value, onChange }) {
     setIsCustomMode(false);
     setIsOpen(false);
     if (onChange) {
+      const [sY, sM, sD] = customStart.split('-').map(Number);
+      const [eY, eM, eD] = customEnd.split('-').map(Number);
       onChange({
         id: 'custom',
         label: 'Custom Range',
-        startDate: `${customStart}T00:00:00.000Z`,
-        endDate: `${customEnd}T23:59:59.999Z`,
+        startDate: new Date(sY, sM - 1, sD, 0, 0, 0, 0).toISOString(),
+        endDate: new Date(eY, eM - 1, eD, 23, 59, 59, 999).toISOString(),
       });
     }
   };

@@ -54,7 +54,10 @@ export const dncApi = {
     }),
   addSingle: (data) => api.post('/dnc/single', data),
   delete: (id) => api.delete(`/dnc/${id}`),
-  getExportUrl: (source = 'ALL') => `/api/dnc/export?source=${encodeURIComponent(source)}`,
+  getExportUrl: (source = 'ALL') => {
+    const token = localStorage.getItem('bla_token') || '';
+    return `/api/dnc/export?source=${encodeURIComponent(source)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  },
 };
 
 export const sessionApi = {
@@ -73,8 +76,14 @@ export const sessionApi = {
   get: (id) => api.get(`/sessions/${id}`),
   getRecords: (id, params) => api.get(`/sessions/${id}/records`, { params }),
   delete: (id) => api.delete(`/sessions/${id}`),
-  getCleanExportUrl: (id, format = 'csv') => `/api/sessions/${id}/export/clean?format=${format}`,
-  getFullExportUrl: (id, format = 'csv') => `/api/sessions/${id}/export/full?format=${format}`,
+  getCleanExportUrl: (id, format = 'csv') => {
+    const token = localStorage.getItem('bla_token') || '';
+    return `/api/sessions/${id}/export/clean?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  },
+  getFullExportUrl: (id, format = 'csv') => {
+    const token = localStorage.getItem('bla_token') || '';
+    return `/api/sessions/${id}/export/full?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  },
 };
 
 export const adminApi = {
