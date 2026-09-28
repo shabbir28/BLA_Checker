@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Phone,
   Loader2,
+  AlertCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 const PAGE_SIZE = 50;
@@ -29,6 +31,22 @@ export function SessionDetails({ sessionId, onBack }) {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: PAGE_SIZE, total: 0, totalPages: 1 });
   const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState('');
+  const [downloadError, setDownloadError] = useState(null);
+
+  const handleDownload = async (type, format) => {
+    const key = `${type}-${format}`;
+    try {
+      setDownloading(key);
+      setDownloadError(null);
+      await sessionApi.downloadExport(sessionId, type, format);
+    } catch (err) {
+      console.error('[SESSION DETAILS] Download error:', err);
+      setDownloadError(err.message || 'Download blocked: BLA verification could not be confirmed.');
+    } finally {
+      setDownloading('');
+    }
+  };
 
   const fetchSession = useCallback(async () => {
     try {
@@ -145,19 +163,43 @@ export function SessionDetails({ sessionId, onBack }) {
         </button>
 
         <div className="flex flex-wrap items-center gap-2">
-          {session.clean_count > 0 && (
+          {session.status === 'COMPLETED' && session.bla_verified !== false ? (
             <>
-              <a href={sessionApi.getCleanExportUrl(sessionId, 'csv')} download className="btn-success btn-sm">
-                <Download className="h-3.5 w-3.5" /> Clean (CSV)
-              </a>
-              <a href={sessionApi.getCleanExportUrl(sessionId, 'xlsx')} download className="btn-secondary btn-sm">
-                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" /> Clean (Excel)
-              </a>
+              {session.clean_count > 0 && (
+                <>
+                  <button
+                    onClick={() => handleDownload('clean', 'csv')}
+                    disabled={Boolean(downloading)}
+                    className="btn-success btn-sm"
+                  >
+                    {downloading === 'clean-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    Clean (CSV)
+                  </button>
+                  <button
+                    onClick={() => handleDownload('clean', 'xlsx')}
+                    disabled={Boolean(downloading)}
+                    className="btn-secondary btn-sm"
+                  >
+                    {downloading === 'clean-xlsx' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" />}
+                    Clean (Excel)
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => handleDownload('full', 'csv')}
+                disabled={Boolean(downloading)}
+                className="btn-secondary btn-sm"
+              >
+                {downloading === 'full-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                Full report
+              </button>
             </>
+          ) : (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-900/60 bg-red-950/40 text-red-300 text-xs font-semibold">
+              <AlertTriangle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+              <span>BLA Check Not Completed (Downloads Disabled)</span>
+            </div>
           )}
-          <a href={sessionApi.getFullExportUrl(sessionId, 'csv')} download className="btn-secondary btn-sm">
-            <Download className="h-3.5 w-3.5" /> Full report
-          </a>
           <button
             onClick={handleDeleteSession}
             disabled={deleting}
@@ -169,6 +211,28 @@ export function SessionDetails({ sessionId, onBack }) {
           </button>
         </div>
       </div>
+
+      {(session.status === 'FAILED' || session.error_message) && (
+        <div className="alert-error" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+          <div>
+            <p className="font-semibold text-sm">BLA Verification Incomplete / Failed</p>
+            <p className="mt-0.5 text-xs text-red-300/90">
+              {session.error_message || 'Blacklist Alliance (BLA) API verification was not completed for this file. Downloading is blocked.'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {downloadError && (
+        <div className="alert-error" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+          <div>
+            <p className="font-semibold text-sm">Download Blocked</p>
+            <p className="mt-0.5 text-xs text-red-300/90">{downloadError}</p>
+          </div>
+        </div>
+      )}
 
       <section className="card p-5 sm:p-6">
         <div className="flex flex-col gap-3 border-b border-surface-border pb-5 sm:flex-row sm:items-start sm:justify-between">

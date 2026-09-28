@@ -57,14 +57,19 @@ export async function runMigrations() {
         status VARCHAR(50) DEFAULT 'QUEUED' CHECK (status IN ('QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED')),
         stage VARCHAR(50) DEFAULT 'IDLE',
         progress_percent NUMERIC(5, 2) DEFAULT 0,
+        bla_verified BOOLEAN DEFAULT FALSE,
         error_message TEXT,
         started_at TIMESTAMP WITH TIME ZONE,
         completed_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
+      ALTER TABLE checking_sessions ADD COLUMN IF NOT EXISTS bla_verified BOOLEAN DEFAULT FALSE;
+      UPDATE checking_sessions SET bla_verified = TRUE WHERE status = 'COMPLETED' AND (bla_verified IS NULL OR bla_verified = FALSE);
+
       CREATE INDEX IF NOT EXISTS idx_checking_sessions_user_id ON checking_sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_checking_sessions_status ON checking_sessions(status);
+      CREATE INDEX IF NOT EXISTS idx_checking_sessions_bla_verified ON checking_sessions(bla_verified);
       CREATE INDEX IF NOT EXISTS idx_checking_sessions_created ON checking_sessions(created_at DESC);
     `);
 

@@ -57,7 +57,13 @@ function MainApp() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-page text-white flex flex-col md:flex-row">
+    <div className="relative min-h-screen text-white flex flex-col md:flex-row">
+      {/* Decorative app background: dotted grid + soft glow, behind all content */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-surface-page">
+        <div className="absolute inset-0 bg-black-dots opacity-70" />
+        <div className="absolute inset-0 bg-app-glow" />
+      </div>
+
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}

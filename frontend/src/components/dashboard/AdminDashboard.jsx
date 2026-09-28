@@ -16,8 +16,9 @@ import {
   ArrowUpRight,
   AlertTriangle,
   Zap,
-  UploadCloud,
   Inbox,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -111,6 +112,21 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState(todayRange);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
+
+  const handleDownload = async (sessionId, type = 'clean', format = 'csv') => {
+    try {
+      setDownloadingId(sessionId);
+      setDownloadError(null);
+      await sessionApi.downloadExport(sessionId, type, format);
+    } catch (err) {
+      console.error('[ADMIN DASHBOARD] Download error:', err);
+      setDownloadError(err.message || 'Download blocked: BLA verification could not be confirmed.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const fetchAnalytics = async (selectedRange = dateRange, silent = false) => {
     try {
@@ -510,6 +526,16 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
           </div>
         </header>
 
+        {downloadError && (
+          <div className="alert-error mx-5 mt-4 flex items-center justify-between" role="alert">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <span className="text-xs text-red-300">{downloadError}</span>
+            </div>
+            <button onClick={() => setDownloadError(null)} className="text-xs text-red-400 hover:text-red-300">Dismiss</button>
+          </div>
+        )}
+
         {recentSessions.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="table">
@@ -574,17 +600,28 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-1.5">
-                          {s.clean_count > 0 && (
-                            <a
-                              href={sessionApi.getCleanExportUrl(s.id, 'csv')}
-                              download
+                          {s.status === 'COMPLETED' && s.bla_verified !== false && s.clean_count > 0 ? (
+                            <button
+                              onClick={() => handleDownload(s.id, 'clean', 'csv')}
+                              disabled={downloadingId === s.id}
                               className="btn-icon"
                               title="Download clean CSV"
                               aria-label="Download clean CSV"
                             >
-                              <Download className="h-3.5 w-3.5" />
-                            </a>
-                          )}
+                              {downloadingId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                              ) : (
+                                <Download className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          ) : s.status === 'FAILED' ? (
+                            <span
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-900/40 bg-red-950/30 text-red-400 cursor-not-allowed"
+                              title={`BLA check failed: ${s.error_message || 'Verification error'}. Download disabled.`}
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            </span>
+                          ) : null}
                           <button onClick={() => onSelectSession(s.id)} className="btn-secondary btn-sm">
                             View <ArrowUpRight className="h-3.5 w-3.5" />
                           </button>

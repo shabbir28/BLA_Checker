@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  AlertCircle,
   Loader2,
 } from 'lucide-react';
 
@@ -58,6 +59,21 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
   const [sessionToDelete, setSessionToDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
+
+  const handleDownload = async (sessionId, type = 'clean', format = 'csv') => {
+    try {
+      setDownloadingId(sessionId);
+      setDownloadError(null);
+      await sessionApi.downloadExport(sessionId, type, format);
+    } catch (err) {
+      console.error('[SESSIONS VIEW] Download error:', err);
+      setDownloadError(err.message || 'Download blocked: BLA verification failed.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const fetchSessions = useCallback(
     async (isSilent = false) => {
@@ -199,6 +215,15 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
       </div>
 
       <section className="card overflow-hidden">
+        {downloadError && (
+          <div className="alert-error mx-4 mt-4 flex items-center justify-between" role="alert">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <span className="text-xs text-red-300">{downloadError}</span>
+            </div>
+            <button onClick={() => setDownloadError(null)} className="text-xs text-red-400 hover:text-red-300">Dismiss</button>
+          </div>
+        )}
         {loading ? (
           <LoadingSpinner message="Loading sessions…" />
         ) : filteredSessions.length === 0 ? (
@@ -285,11 +310,28 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-1.5">
-                          {s.status === 'COMPLETED' && s.clean_count > 0 && (
-                            <a href={sessionApi.getCleanExportUrl(s.id, 'csv')} download className="btn-icon" title="Download clean CSV" aria-label="Download clean CSV">
-                              <Download className="h-3.5 w-3.5" />
-                            </a>
-                          )}
+                          {s.status === 'COMPLETED' && s.bla_verified !== false && s.clean_count > 0 ? (
+                            <button
+                              onClick={() => handleDownload(s.id, 'clean', 'csv')}
+                              disabled={downloadingId === s.id}
+                              className="btn-icon"
+                              title="Download clean CSV"
+                              aria-label="Download clean CSV"
+                            >
+                              {downloadingId === s.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
+                              ) : (
+                                <Download className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          ) : s.status === 'FAILED' ? (
+                            <span
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-red-900/40 bg-red-950/30 text-red-400 cursor-not-allowed"
+                              title={`BLA check failed: ${s.error_message || 'Verification error'}. Download disabled.`}
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                            </span>
+                          ) : null}
                           <button onClick={() => onSelectSession(s.id)} className="btn-icon" title="View details" aria-label="View details">
                             <Eye className="h-3.5 w-3.5" />
                           </button>

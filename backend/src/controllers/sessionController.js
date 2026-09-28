@@ -253,6 +253,38 @@ export async function exportSessionClean(req, res) {
       return res.status(403).json({ message: 'Access denied.' });
     }
 
+    // STRICT COMPLIANCE: Ensure file was checked by BLA API and completed without error
+    if (session.status === 'FAILED' || session.stage === 'FAILED') {
+      const errorMsg = session.error_message || 'BLA verification failed';
+      return res.status(400).json({
+        message: `File cannot be downloaded because BLA checking encountered an error: ${errorMsg}. Only files successfully verified by the BLA API can be downloaded.`,
+        error: errorMsg,
+        status: 'FAILED',
+      });
+    }
+
+    if (session.status !== 'COMPLETED' || session.stage !== 'DONE') {
+      return res.status(400).json({
+        message: `File cannot be downloaded yet. BLA checking is currently in progress (${session.stage || session.status}). Please wait until verification completes.`,
+        status: session.status,
+        stage: session.stage,
+      });
+    }
+
+    if (session.bla_verified === false) {
+      return res.status(400).json({
+        message: 'File cannot be downloaded because it was not verified by the Blacklist Alliance (BLA) API.',
+        status: 'UNVERIFIED',
+      });
+    }
+
+    if (!session.clean_count || parseInt(session.clean_count, 10) <= 0) {
+      return res.status(400).json({
+        message: 'No clean leads found in this file to download. All numbers were identified as DNC or invalid.',
+        clean_count: 0,
+      });
+    }
+
     const recordsRes = await query(
       `SELECT raw_phone, normalized_phone, original_row_data
        FROM session_records
@@ -262,6 +294,12 @@ export async function exportSessionClean(req, res) {
     );
 
     const rows = recordsRes.rows;
+    if (rows.length === 0) {
+      return res.status(400).json({
+        message: 'No clean records found for this session.',
+      });
+    }
+
     const exportData = rows.map((r) => {
       const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
       return {
@@ -286,14 +324,10 @@ export async function exportSessionClean(req, res) {
 
     // Default CSV
     let csv = '';
-    if (exportData.length > 0) {
-      const headers = Object.keys(exportData[0]);
-      csv += headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
-      for (const row of exportData) {
-        csv += headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
-      }
-    } else {
-      csv = 'No clean records found for this session.\n';
+    const headers = Object.keys(exportData[0]);
+    csv += headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
+    for (const row of exportData) {
+      csv += headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
     }
 
     res.setHeader('Content-Type', 'text/csv');
@@ -301,7 +335,7 @@ export async function exportSessionClean(req, res) {
     return res.send(csv);
   } catch (error) {
     console.error('[SESSION] Clean export error:', error);
-    return res.status(500).json({ message: 'Failed to export clean leads.' });
+    return res.status(500).json({ message: 'Failed to export clean leads: ' + error.message });
   }
 }
 
@@ -318,6 +352,31 @@ export async function exportSessionFull(req, res) {
       return res.status(403).json({ message: 'Access denied.' });
     }
 
+    // STRICT COMPLIANCE: Ensure file was checked by BLA API and completed without error
+    if (session.status === 'FAILED' || session.stage === 'FAILED') {
+      const errorMsg = session.error_message || 'BLA verification failed';
+      return res.status(400).json({
+        message: `Audit report cannot be downloaded because BLA checking encountered an error: ${errorMsg}. Only files successfully verified by the BLA API can be downloaded.`,
+        error: errorMsg,
+        status: 'FAILED',
+      });
+    }
+
+    if (session.status !== 'COMPLETED' || session.stage !== 'DONE') {
+      return res.status(400).json({
+        message: `Audit report cannot be downloaded yet. BLA checking is currently in progress (${session.stage || session.status}).`,
+        status: session.status,
+        stage: session.stage,
+      });
+    }
+
+    if (session.bla_verified === false) {
+      return res.status(400).json({
+        message: 'Audit report cannot be downloaded because this file was not verified by the Blacklist Alliance (BLA) API.',
+        status: 'UNVERIFIED',
+      });
+    }
+
     const recordsRes = await query(
       `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at
        FROM session_records
@@ -327,6 +386,12 @@ export async function exportSessionFull(req, res) {
     );
 
     const rows = recordsRes.rows;
+    if (rows.length === 0) {
+      return res.status(400).json({
+        message: 'No records found for this session.',
+      });
+    }
+
     const exportData = rows.map((r) => {
       const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
       return {
@@ -354,14 +419,10 @@ export async function exportSessionFull(req, res) {
 
     // CSV
     let csv = '';
-    if (exportData.length > 0) {
-      const headers = Object.keys(exportData[0]);
-      csv += headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
-      for (const row of exportData) {
-        csv += headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
-      }
-    } else {
-      csv = 'No records found for this session.\n';
+    const headers = Object.keys(exportData[0]);
+    csv += headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
+    for (const row of exportData) {
+      csv += headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
     }
 
     res.setHeader('Content-Type', 'text/csv');
@@ -369,7 +430,7 @@ export async function exportSessionFull(req, res) {
     return res.send(csv);
   } catch (error) {
     console.error('[SESSION] Full export error:', error);
-    return res.status(500).json({ message: 'Failed to export full audit report.' });
+    return res.status(500).json({ message: 'Failed to export full audit report: ' + error.message });
   }
 }
 

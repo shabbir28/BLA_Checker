@@ -237,12 +237,10 @@ class ScrubbingEngine {
         const batchResults = await blaService.verifyBatch(batch);
 
         for (const phone of batch) {
-          const res = batchResults.get(phone) || {
-            isDnc: false,
-            status: 'CLEAN',
-            reason: 'Clean - No DNC Record Found',
-            raw: {},
-          };
+          const res = batchResults.get(phone);
+          if (!res) {
+            throw new Error(`BLA verification incomplete: Blacklist Alliance API did not return a response for phone number ${phone}.`);
+          }
 
           const indices = validPhoneMap.get(phone);
           if (res.isDnc) {
@@ -342,6 +340,7 @@ class ScrubbingEngine {
         `UPDATE checking_sessions
          SET status = 'COMPLETED',
              stage = 'DONE',
+             bla_verified = TRUE,
              progress_percent = 100,
              total_rows = $1,
              valid_numbers = $2,
@@ -392,7 +391,7 @@ class ScrubbingEngine {
       try {
         await query(
           `UPDATE checking_sessions
-           SET status = 'FAILED', stage = 'FAILED', error_message = $1, completed_at = NOW()
+           SET status = 'FAILED', stage = 'FAILED', bla_verified = FALSE, error_message = $1, completed_at = NOW()
            WHERE id = $2`,
           [error.message || 'Scrubbing failed', sessionId]
         );

@@ -84,6 +84,40 @@ export const sessionApi = {
     const token = localStorage.getItem('bla_token') || '';
     return `/api/sessions/${id}/export/full?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
   },
+  downloadExport: async (id, type = 'clean', format = 'csv') => {
+    const token = localStorage.getItem('bla_token') || '';
+    const res = await fetch(`/api/sessions/${id}/export/${type}?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!res.ok) {
+      let message = 'Failed to download export file.';
+      try {
+        const errJson = await res.json();
+        if (errJson.message) message = errJson.message;
+      } catch (e) {
+        message = `Server responded with error status ${res.status}`;
+      }
+      throw new Error(message);
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition');
+    let filename = `session_${type}_${id}.${format}`;
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(blobUrl);
+    document.body.removeChild(a);
+  },
 };
 
 export const adminApi = {

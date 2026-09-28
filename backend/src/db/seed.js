@@ -34,9 +34,11 @@ export async function runSeeds() {
     `, ['user@blachecker.com', userPasswordHash, 'Lead Operations Specialist']);
 
     // 3. Seed Default BLA API Configuration
+    const liveApiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
+    const liveApiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
     await client.query(`
       INSERT INTO api_configurations (service_name, base_url, api_key, batch_size, rate_limit_per_sec, is_mock_mode, mock_dnc_rate, updated_by)
-      VALUES ('BLA_API', 'https://api.externalbla.com/v1/dnc-check', 'bla_sec_test_enterprise_9981', 100, 10, true, 18, $1)
+      VALUES ('BLA_API', $1, $2, 500, 10, false, 0, $3)
       ON CONFLICT (service_name) DO UPDATE SET
         base_url = EXCLUDED.base_url,
         api_key = EXCLUDED.api_key,
@@ -44,7 +46,7 @@ export async function runSeeds() {
         rate_limit_per_sec = EXCLUDED.rate_limit_per_sec,
         is_mock_mode = EXCLUDED.is_mock_mode,
         mock_dnc_rate = EXCLUDED.mock_dnc_rate;
-    `, [adminId]);
+    `, [liveApiUrl, liveApiKey, adminId]);
 
     // 4. Master DNC initialized clean (no dummy records)
     console.log('[SEED] Master DNC is clean and ready for user uploads.');

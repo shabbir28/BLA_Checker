@@ -12,20 +12,39 @@ class BlaService {
       return this.configCache;
     }
 
-    const apiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
-    const apiKey = process.env.BLA_API_KEY || '';
+    let apiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
+    let apiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
+    let batchSize = 500;
+    let rateLimit = 10;
+    let isMockMode = false;
+    let mockDncRate = 18;
 
-    // Determine mock mode: only use mock if key is empty or is demo placeholder
-    const isDemoKey = !apiKey || apiKey === 'bla_live_sec_key_demo_enterprise' || apiKey === 'bla_sec_default';
+    try {
+      const { query: dbQuery } = await import('../config/db.js');
+      const dbRes = await dbQuery('SELECT * FROM api_configurations WHERE service_name = $1 LIMIT 1', ['BLA_API']);
+      if (dbRes.rows.length > 0) {
+        const row = dbRes.rows[0];
+        if (row.base_url) apiUrl = row.base_url;
+        if (row.api_key && row.api_key !== 'bla_sec_test_enterprise_9981') {
+          apiKey = row.api_key;
+        }
+        if (row.batch_size) batchSize = row.batch_size;
+        if (row.rate_limit_per_sec) rateLimit = row.rate_limit_per_sec;
+        if (typeof row.is_mock_mode === 'boolean') isMockMode = row.is_mock_mode;
+        if (row.mock_dnc_rate) mockDncRate = row.mock_dnc_rate;
+      }
+    } catch (e) {
+      // Fallback to env
+    }
 
     const config = {
       service_name: 'BLA_API',
       base_url: apiUrl,
       api_key: apiKey,
-      batch_size: 500, // Blacklist Alliance easily handles 500 numbers per call (< 1MB)
-      rate_limit_per_sec: 10,
-      is_mock_mode: isDemoKey,
-      mock_dnc_rate: 18,
+      batch_size: Math.min(Math.max(batchSize, 10), 500),
+      rate_limit_per_sec: rateLimit,
+      is_mock_mode: isMockMode && !apiKey,
+      mock_dnc_rate: mockDncRate,
     };
 
     this.configCache = config;
@@ -39,7 +58,7 @@ class BlaService {
   }
 
   /**
-   * Deterministic hash for simulation so a given number consistently behaves as DNC or Clean
+   * Deterministic hash for simulation
    */
   hashPhone(phoneStr) {
     let hash = 0;
@@ -61,65 +80,38 @@ class BlaService {
 
     if (!phoneNumbers || phoneNumbers.length === 0) return results;
 
-    // Simulation / Mock mode if no live key provided
+    // Strict validation: Require live API key and live BLA verification
+    if (!config.api_key || config.api_key === 'bla_live_sec_key_demo_enterprise' || config.api_key === 'bla_sec_default') {
+      throw new Error('Blacklist Alliance API Key is required for BLA verification. Please configure a valid BLA API key.');
+    }
+
     if (config.is_mock_mode) {
-      await new Promise((resolve) => setTimeout(resolve, Math.floor(Math.random() * 80) + 40));
-      const dncRate = config.mock_dnc_rate || 18;
-
-      for (const phone of phoneNumbers) {
-        const hash = this.hashPhone(phone);
-        const score = hash % 100;
-        const isDnc = score < dncRate;
-
-        if (isDnc) {
-          const reasons = [
-            'BLA National Registry Matched',
-            'BLA State Level Registry (Active)',
-            'BLA Direct Consumer Opt-Out',
-            'BLA Litigator / High TCPA Risk',
-          ];
-          const reason = reasons[hash % reasons.length];
-          results.set(phone, {
-            isDnc: true,
-            status: 'BLA_DNC',
-            reason,
-            raw: {
-              provider: 'BLA_MOCK_VERIFIER',
-              timestamp: new Date().toISOString(),
-              tcpaRiskScore: 85 + (hash % 15),
-              dncTypes: ['FEDERAL', 'STATE'],
-              category: 'LITIGATOR_OR_DNC',
-            },
-          });
-        } else {
-          results.set(phone, {
-            isDnc: false,
-            status: 'CLEAN',
-            reason: 'Clean - No DNC Record Found',
-            raw: {
-              provider: 'BLA_MOCK_VERIFIER',
-              timestamp: new Date().toISOString(),
-              tcpaRiskScore: 5 + (hash % 10),
-              dncTypes: [],
-              category: 'CLEAN_VERIFIED',
-            },
-          });
-        }
-      }
-      return results;
+      throw new Error('Live Blacklist Alliance API connection is required. Mock mode is disabled to ensure only real BLA-verified files can be downloaded.');
     }
 
     // LIVE BLACKLIST ALLIANCE API CALL
     const targetUrl = this.buildRequestUrl(config);
-    const data = await this.postWithRetry(targetUrl, { phones: phoneNumbers }, 10000);
+    const data = await this.postWithRetry(targetUrl, { phones: phoneNumbers }, 15000);
+
+    if (!data || typeof data !== 'object') {
+      throw new Error('Blacklist Alliance API returned an empty or invalid response.');
+    }
+
+    // Check for error responses
+    if (data.status && String(data.status).toLowerCase() !== 'success') {
+      const errMsg = data.message || data.error || data.status || 'Blacklist Alliance rejected the request';
+      throw new Error(`Blacklist Alliance rejected the request: ${errMsg}`);
+    }
+
+    if (data.error) {
+      throw new Error(`Blacklist Alliance error: ${data.error}`);
+    }
 
     // Format 1: Official Blacklist Alliance v2 response:
     // { status: 'success', numbers: 3, phones: ['...'], supression: ['9999999999'], reasons: { '9999999999': '...' } }
-    if (data && typeof data === 'object' && !Array.isArray(data)) {
-      // BLA reports auth/quota problems with HTTP 200 and status != 'success'. Treating that as
-      // "no matches" would silently mark every number CLEAN, so surface it as a hard failure.
-      if (data.status && String(data.status).toLowerCase() !== 'success') {
-        throw new Error(`Blacklist Alliance rejected the request: ${data.message || data.status}`);
+    if (!Array.isArray(data)) {
+      if (String(data.status || '').toLowerCase() !== 'success') {
+        throw new Error(`Blacklist Alliance API did not return success status: ${data.message || 'Verification failed'}`);
       }
 
       const suppressionSet = new Set(
@@ -141,6 +133,7 @@ class BlaService {
               provider: 'Blacklist Alliance',
               suppressed: true,
               reason,
+              timestamp: new Date().toISOString(),
             },
           });
         } else {
@@ -152,6 +145,7 @@ class BlaService {
               provider: 'Blacklist Alliance',
               suppressed: false,
               status: 'CLEAN',
+              timestamp: new Date().toISOString(),
             },
           });
         }

@@ -115,6 +115,8 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
   const [pollInterval, setPollInterval] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [starting, setStarting] = useState(false);
+  const [downloading, setDownloading] = useState('');
+  const [downloadError, setDownloadError] = useState(null);
 
   const fileInputRef = useRef(null);
 
@@ -123,6 +125,21 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [pollInterval]);
+
+  const handleDownload = async (type, format) => {
+    if (!activeSession) return;
+    const downloadKey = `${type}-${format}`;
+    try {
+      setDownloading(downloadKey);
+      setDownloadError(null);
+      await sessionApi.downloadExport(activeSession.id, type, format);
+    } catch (err) {
+      console.error('[STUDIO] Download error:', err);
+      setDownloadError(err.message || 'Download blocked: BLA verification could not be confirmed.');
+    } finally {
+      setDownloading('');
+    }
+  };
 
   const handleFileSelected = (selectedFile) => {
     if (!selectedFile) return;
@@ -493,16 +510,44 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
           <div className="card-raised mt-6 p-5 text-center">
             <h3 className="text-sm font-semibold text-white">Download your results</h3>
             <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns. The full report includes every number and its status.</p>
+            
+            {downloadError && (
+              <div className="alert-error mt-4 text-left" role="alert">
+                <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+                <div>
+                  <p className="font-semibold text-xs text-red-300">Download blocked</p>
+                  <p className="mt-0.5 text-xs text-red-300/90">{downloadError}</p>
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-              <a href={sessionApi.getCleanExportUrl(activeSession.id, 'csv')} download className="btn-success">
-                <Download className="h-4 w-4" /> Clean numbers (CSV)
-              </a>
-              <a href={sessionApi.getCleanExportUrl(activeSession.id, 'xlsx')} download className="btn-secondary">
-                <FileSpreadsheet className="h-4 w-4 text-emerald-400" /> Clean numbers (Excel)
-              </a>
-              <a href={sessionApi.getFullExportUrl(activeSession.id, 'csv')} download className="btn-ghost">
-                <Download className="h-4 w-4" /> Full report (CSV)
-              </a>
+              <button
+                onClick={() => handleDownload('clean', 'csv')}
+                disabled={Boolean(downloading) || activeSession.clean_count === 0}
+                className="btn-success"
+                title={activeSession.clean_count === 0 ? 'No clean numbers to download' : 'Download clean numbers as CSV'}
+              >
+                {downloading === 'clean-csv' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Clean numbers (CSV)
+              </button>
+              <button
+                onClick={() => handleDownload('clean', 'xlsx')}
+                disabled={Boolean(downloading) || activeSession.clean_count === 0}
+                className="btn-secondary"
+                title={activeSession.clean_count === 0 ? 'No clean numbers to download' : 'Download clean numbers as Excel'}
+              >
+                {downloading === 'clean-xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 text-emerald-400" />}
+                Clean numbers (Excel)
+              </button>
+              <button
+                onClick={() => handleDownload('full', 'csv')}
+                disabled={Boolean(downloading)}
+                className="btn-ghost"
+              >
+                {downloading === 'full-csv' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Full report (CSV)
+              </button>
             </div>
           </div>
 

@@ -12,11 +12,28 @@ import {
   Zap,
   Database,
   RefreshCw,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 
 export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [downloadError, setDownloadError] = useState(null);
+
+  const handleDownload = async (sessionId, type = 'clean', format = 'csv') => {
+    try {
+      setDownloadingId(sessionId);
+      setDownloadError(null);
+      await sessionApi.downloadExport(sessionId, type, format);
+    } catch (err) {
+      console.error('[USER DASHBOARD] Download error:', err);
+      setDownloadError(err.message || 'Download blocked: BLA verification could not be confirmed.');
+    } finally {
+      setDownloadingId(null);
+    }
+  };
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
@@ -153,6 +170,16 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
           </button>
         </div>
 
+        {downloadError && (
+          <div className="alert-error mx-4 mb-4 flex items-center justify-between" role="alert">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+              <span className="text-xs text-red-300">{downloadError}</span>
+            </div>
+            <button onClick={() => setDownloadError(null)} className="text-xs text-red-400 hover:text-red-300">Dismiss</button>
+          </div>
+        )}
+
         {loading ? (
           <LoadingSpinner message="Loading files..." />
         ) : filteredSessions.length > 0 ? (
@@ -215,15 +242,19 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
                     </td>
                     <td className="py-3 pr-3 text-right font-sans">
                       <div className="flex items-center justify-end gap-2">
-                        {session.clean_count > 0 && (
-                          <a
-                            href={sessionApi.getCleanExportUrl(session.id, 'csv')}
-                            download
+                        {session.status === 'COMPLETED' && session.bla_verified !== false && session.clean_count > 0 && (
+                          <button
+                            onClick={() => handleDownload(session.id, 'clean', 'csv')}
+                            disabled={downloadingId === session.id}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/60 text-xs font-semibold transition"
                           >
-                            <Download className="w-3.5 h-3.5" />
+                            {downloadingId === session.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
                             <span>Download Clean</span>
-                          </a>
+                          </button>
                         )}
                         <button
                           onClick={() => onSelectSession(session.id)}
