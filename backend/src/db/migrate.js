@@ -105,6 +105,16 @@ export async function runMigrations() {
         updated_by INT REFERENCES users(id) ON DELETE SET NULL,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      UPDATE api_configurations
+      SET base_url = 'https://api.blacklistalliance.net/bulklookup',
+          api_key = CASE 
+            WHEN api_key IS NULL OR api_key = '' OR api_key = 'bla_sec_test_enterprise_9981' OR api_key = 'bla_sec_default' OR api_key = 'bla_live_sec_key_demo_enterprise'
+            THEN 'KePFGNcVHPpzjxU88nWD'
+            ELSE api_key
+          END,
+          is_mock_mode = false
+      WHERE base_url LIKE '%externalbla.com%' OR is_mock_mode = true OR base_url IS NULL;
     `);
 
     // 6. Audit Logs Table

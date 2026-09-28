@@ -23,10 +23,15 @@ class BlaService {
       const { query: dbQuery } = await import('../config/db.js');
       const dbRes = await dbQuery('SELECT * FROM api_configurations WHERE service_name = $1 LIMIT 1', ['BLA_API']);
       if (dbRes.rows.length > 0) {
-        const row = dbRes.rows[0];
-        if (row.base_url) apiUrl = row.base_url;
+        if (row.base_url && !row.base_url.includes('externalbla.com')) {
+          apiUrl = row.base_url;
+        } else {
+          apiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
+        }
         if (row.api_key && row.api_key !== 'bla_sec_test_enterprise_9981') {
           apiKey = row.api_key;
+        } else {
+          apiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
         }
         if (row.batch_size) batchSize = row.batch_size;
         if (row.rate_limit_per_sec) rateLimit = row.rate_limit_per_sec;
