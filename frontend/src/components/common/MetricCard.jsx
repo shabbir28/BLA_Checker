@@ -76,15 +76,15 @@ export function MetricCard({
   }
 
   return (
-    <div className="card card-hover relative flex flex-col overflow-hidden p-5">
+    <div className="card card-hover relative flex min-h-[148px] flex-col overflow-hidden p-4">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-start gap-2.5">
+        <div className="flex min-w-0 items-start gap-2">
           {Icon && (
-            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${tone.icon}`}>
-              <Icon className="h-[17px] w-[17px]" />
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${tone.icon}`}>
+              <Icon className="h-4 w-4" />
             </div>
           )}
-          <span className="min-h-[2.25rem] text-[12.5px] font-medium leading-snug text-zinc-400 line-clamp-2">
+          <span className="min-h-[2rem] text-[12px] font-medium leading-snug text-zinc-400 line-clamp-2">
             {title}
           </span>
         </div>
@@ -101,7 +101,7 @@ export function MetricCard({
           {loading ? (
             <div className="skeleton h-8 w-28" />
           ) : (
-            <span className="block truncate font-mono text-[28px] font-bold leading-none tracking-tight text-white">
+            <span className="block font-mono text-[18px] font-bold leading-none tracking-tight text-white sm:text-[20px] xl:text-[22px]">
               {value}
             </span>
           )}

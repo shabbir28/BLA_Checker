@@ -6,6 +6,7 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import DateRangeSelector from '../common/DateRangeSelector';
 import ChartTooltip from '../common/ChartTooltip';
 import { formatNumber, formatCompact, formatDateShort, formatDateTime, safeRate } from '../../utils/format';
+import { thisWeekRange } from '../../utils/timezone';
 import {
   Database,
   FileCheck2,
@@ -19,6 +20,7 @@ import {
   Inbox,
   Loader2,
   AlertCircle,
+  UploadCloud,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -41,21 +43,11 @@ const COLORS = {
   local: '#f59e0b',
   bla: '#ef4444',
   invalid: '#71717a',
-  grid: '#1f1f24',
+  grid: '#163024',
   axis: '#52525b',
 };
 
 const SOURCE_COLORS = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#a1a1aa'];
-
-function todayRange() {
-  const now = new Date();
-  return {
-    id: 'today',
-    label: 'Today',
-    startDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString(),
-    endDate: new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString(),
-  };
-}
 
 function sourceLabel(source) {
   const map = {
@@ -111,7 +103,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [dateRange, setDateRange] = useState(todayRange);
+  const [dateRange, setDateRange] = useState(thisWeekRange);
   const [downloadingId, setDownloadingId] = useState(null);
   const [downloadError, setDownloadError] = useState(null);
 
@@ -192,6 +184,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
   );
 
   const rangeLabel = dateRange.id === 'today' ? 'today' : dateRange.label.toLowerCase();
+  const hasVolume = timeline.some((t) => Number(t.total_leads) > 0);
   const hasDncTimeline = timeline.some((t) => Number(t.local_dnc_leads) > 0 || Number(t.bla_dnc_leads) > 0);
 
   // Source composition for the "Total DNC in Database" KPI footer
@@ -227,7 +220,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
           {top.map((s) => (
             <span key={s.label} className="flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: s.color }} />
-              {s.label} {formatCompact(s.value)}
+              {s.label} {formatNumber(s.value)}
             </span>
           ))}
         </div>
@@ -277,10 +270,10 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
       </div>
 
       {/* ---------- KPIs ---------- */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <MetricCard
           title="BLA API Checks"
-          value={formatCompact(kpis.totalBlaChecked)}
+          value={formatNumber(kpis.totalBlaChecked)}
           subtext="Verified via Blacklist Alliance"
           icon={Zap}
           color="amber"
@@ -289,7 +282,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
         />
         <MetricCard
           title="Leads Checked"
-          value={formatCompact(kpis.totalLeadsChecked)}
+          value={formatNumber(kpis.totalLeadsChecked)}
           subtext={`${formatNumber(kpis.completedSessions)} completed files`}
           icon={FileCheck2}
           color="white"
@@ -297,7 +290,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
         />
         <MetricCard
           title="Clean Numbers"
-          value={formatCompact(kpis.totalCleanLeads)}
+          value={formatNumber(kpis.totalCleanLeads)}
           subtext={`${(kpis.cleanRatePercent || 0).toFixed(1)}% clean rate`}
           icon={ShieldCheck}
           color="emerald"
@@ -306,7 +299,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
         />
         <MetricCard
           title="DNC Intercepted"
-          value={formatCompact(kpis.totalLocalDnc)}
+          value={formatNumber(kpis.totalLocalDnc)}
           subtext="Matched locally, skipped BLA"
           icon={ShieldAlert}
           color="cyan"
@@ -344,7 +337,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
           }
         >
           <div className="h-72">
-            {timeline.length > 0 ? (
+            {hasVolume ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={timeline} margin={{ top: 8, right: 4, left: -16, bottom: 0 }}>
                   <defs>

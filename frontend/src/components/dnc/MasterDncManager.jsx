@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import Modal from '../common/Modal';
 import LoadingSpinner from '../common/LoadingSpinner';
 import EmptyState from '../common/EmptyState';
-import { formatNumber, formatCompact } from '../../utils/format';
+import { formatNumber, formatDate } from '../../utils/format';
 import {
   UploadCloud,
   Plus,
@@ -202,10 +202,10 @@ export function MasterDncManager() {
   const bySource = (key) => Number(stats?.bySource?.find((s) => s.source === key)?.count || 0);
   const totalCount = stats?.total || 0;
   const statTiles = [
-    { icon: Database, label: 'Total records', value: formatCompact(totalCount), full: formatNumber(totalCount), cls: 'text-white' },
-    { icon: Zap, label: 'BLA synced', value: formatCompact(bySource('BLA_SYNC')), full: formatNumber(bySource('BLA_SYNC')), cls: 'text-emerald-300' },
-    { icon: FileSpreadsheet, label: 'Uploaded', value: formatCompact(bySource('MANUAL_UPLOAD') + bySource('INITIAL_SEED')), full: formatNumber(bySource('MANUAL_UPLOAD') + bySource('INITIAL_SEED')), cls: 'text-white' },
-    { icon: Clock, label: 'Added last 24h', value: formatCompact(stats?.addedLast24h || 0), full: formatNumber(stats?.addedLast24h || 0), cls: 'text-cyan-300' },
+    { icon: Database, label: 'Total records', value: formatNumber(totalCount), cls: 'text-white' },
+    { icon: Zap, label: 'BLA synced', value: formatNumber(bySource('BLA_SYNC')), cls: 'text-emerald-300' },
+    { icon: FileSpreadsheet, label: 'Uploaded', value: formatNumber(bySource('MANUAL_UPLOAD') + bySource('INITIAL_SEED')), cls: 'text-white' },
+    { icon: Clock, label: 'Added last 24h', value: formatNumber(stats?.addedLast24h || 0), cls: 'text-cyan-300' },
   ];
 
   return (
@@ -240,7 +240,7 @@ export function MasterDncManager() {
         {statTiles.map((t) => {
           const Icon = t.icon;
           return (
-            <div key={t.label} className="card card-hover p-4" title={t.full}>
+            <div key={t.label} className="card card-hover p-4">
               <div className="flex items-center justify-between text-zinc-500">
                 <span className="text-[11px] font-medium">{t.label}</span>
                 <Icon className="h-3.5 w-3.5" />
@@ -310,7 +310,7 @@ export function MasterDncManager() {
                       <td className="font-mono font-semibold text-white">{rec.normalized_phone}</td>
                       <td>{sourceChip(rec.source)}</td>
                       <td className="max-w-[220px] truncate text-xs text-zinc-400">{rec.campaign_or_file || '—'}</td>
-                      <td className="whitespace-nowrap text-xs text-zinc-500">{new Date(rec.created_at).toLocaleDateString()}</td>
+                      <td className="whitespace-nowrap text-xs text-zinc-500">{formatDate(rec.created_at)}</td>
                       {isAdmin && (
                         <td className="text-right">
                           <button

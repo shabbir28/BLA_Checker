@@ -16,7 +16,7 @@ export function Navbar({ onToggleSidebar, activeTab }) {
   const initial = (user?.name || user?.email || 'U').charAt(0).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-surface-border bg-surface-page/85 px-4 backdrop-blur-md md:px-8">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-surface-border bg-surface-page/45 px-4 backdrop-blur-xl md:px-8">
       <div className="flex min-w-0 items-center gap-3">
         <button onClick={onToggleSidebar} className="btn-icon md:hidden" aria-label="Open menu">
           <Menu className="h-4 w-4" />

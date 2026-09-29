@@ -5,7 +5,7 @@ import Modal from '../common/Modal';
 import LoadingSpinner from '../common/LoadingSpinner';
 import StatusBadge from '../common/StatusBadge';
 import EmptyState from '../common/EmptyState';
-import { formatNumber } from '../../utils/format';
+import { formatNumber, formatDate } from '../../utils/format';
 import {
   Users,
   UserPlus,
@@ -279,7 +279,7 @@ export function UserManagement() {
                         </td>
                         <td className="text-right font-mono text-zinc-300">{formatNumber(u.sessions_count)}</td>
                         <td className="text-right font-mono font-semibold text-emerald-300">{formatNumber(u.total_leads_scrubbed)}</td>
-                        <td className="whitespace-nowrap text-xs text-zinc-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                        <td className="whitespace-nowrap text-xs text-zinc-500">{formatDate(u.created_at)}</td>
                         <td>
                           <div className="flex items-center justify-end gap-1.5">
                             <button onClick={() => handleOpenEdit(u)} className="btn-icon" title="Edit user" aria-label="Edit user">

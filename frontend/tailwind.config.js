@@ -8,15 +8,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        black: '#000000',
-        // Layered dark surfaces: page -> card -> elevated -> border
+        black: '#020806',
+        // Layered dark-green surfaces: page -> card -> elevated -> border
         surface: {
-          page: '#050506',
-          card: '#0c0c0e',
-          raised: '#131316',
-          hover: '#18181c',
-          border: '#1f1f24',
-          'border-strong': '#2a2a31',
+          page: '#020806',
+          card: '#07110d',
+          raised: '#0c1814',
+          hover: '#122019',
+          border: '#163024',
+          'border-strong': '#1e3d2e',
         },
         brand: {
           50: '#f4f4f5',
@@ -41,8 +41,8 @@ export default {
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       boxShadow: {
-        card: '0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 24px -12px rgba(0,0,0,0.8)',
-        glow: '0 0 0 1px rgba(255,255,255,0.06), 0 12px 40px -12px rgba(16,185,129,0.25)',
+        card: '0 1px 0 0 rgba(167,243,208,0.04) inset, 0 10px 28px -14px rgba(0,0,0,0.75)',
+        glow: '0 0 0 1px rgba(16,185,129,0.12), 0 12px 40px -12px rgba(16,185,129,0.28)',
       },
       keyframes: {
         'fade-in-up': {

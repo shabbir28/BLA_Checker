@@ -58,9 +58,9 @@ function MainApp() {
 
   return (
     <div className="relative min-h-screen text-white flex flex-col md:flex-row">
-      {/* Decorative app background: dotted grid + soft glow, behind all content */}
+      {/* Full-app atmosphere: deep green-black + dotted grid + emerald glow */}
       <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-surface-page">
-        <div className="absolute inset-0 bg-black-dots opacity-70" />
+        <div className="absolute inset-0 bg-black-dots" />
         <div className="absolute inset-0 bg-app-glow" />
       </div>
 

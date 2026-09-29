@@ -1,25 +1,34 @@
 import bcrypt from 'bcryptjs';
 import { query } from '../config/db.js';
 import blaService from '../services/blaService.js';
+import { tzSqlLiteral } from '../utils/appTimezone.js';
+
+function toIsoOrNull(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 export async function getDashboardAnalytics(req, res) {
   try {
-    const { startDate, endDate } = req.query;
+    const tz = tzSqlLiteral();
+    const startIso = toIsoOrNull(req.query.startDate);
+    const endIso = toIsoOrNull(req.query.endDate);
 
     const sessionsWhereClauses = [];
     const joinedWhereClauses = [];
     const params = [];
 
-    if (startDate) {
-      params.push(startDate);
-      sessionsWhereClauses.push(`created_at >= $${params.length}`);
-      joinedWhereClauses.push(`s.created_at >= $${params.length}`);
+    if (startIso) {
+      params.push(startIso);
+      sessionsWhereClauses.push(`created_at >= $${params.length}::timestamptz`);
+      joinedWhereClauses.push(`s.created_at >= $${params.length}::timestamptz`);
     }
 
-    if (endDate) {
-      params.push(endDate);
-      sessionsWhereClauses.push(`created_at <= $${params.length}`);
-      joinedWhereClauses.push(`s.created_at <= $${params.length}`);
+    if (endIso) {
+      params.push(endIso);
+      sessionsWhereClauses.push(`created_at <= $${params.length}::timestamptz`);
+      joinedWhereClauses.push(`s.created_at <= $${params.length}::timestamptz`);
     }
 
     const sessionsWhereSql = sessionsWhereClauses.length > 0 ? `WHERE ${sessionsWhereClauses.join(' AND ')}` : '';
@@ -44,7 +53,7 @@ export async function getDashboardAnalytics(req, res) {
       ${sessionsWhereSql}
     `, params);
 
-    // Today specific BLA checked count
+    // Calendar "today" in the app timezone (not the server UTC date)
     const todayBlaRes = await query(`
       SELECT
         COALESCE(SUM(clean_count + bla_dnc_count), 0) as today_bla_checked,
@@ -53,7 +62,7 @@ export async function getDashboardAnalytics(req, res) {
         COALESCE(SUM(local_dnc_count), 0) as today_local_dnc,
         COALESCE(SUM(bla_dnc_count), 0) as today_bla_dnc
       FROM checking_sessions
-      WHERE created_at >= CURRENT_DATE
+      WHERE (created_at AT TIME ZONE ${tz})::date = (NOW() AT TIME ZONE ${tz})::date
     `);
 
     const usersCountRes = await query("SELECT COUNT(*) as total_users FROM users WHERE status = 'active'");
@@ -74,26 +83,65 @@ export async function getDashboardAnalytics(req, res) {
     const cleanRate = totalVerified > 0 ? ((totalClean / totalVerified) * 100).toFixed(1) : 0;
     const estimatedCostSaved = (totalApiSaved * 0.005).toFixed(2); // $0.005 per saved API call
 
-    // 2. Timeline chart (filtered or last 30 days)
-    const timelineWhere = sessionsWhereSql || "WHERE created_at >= NOW() - INTERVAL '30 days'";
+    // 2. Timeline: group by local calendar day and fill missing days in the range
+    const timelineParams = startIso || endIso ? params : [];
+    let startDaySql = `COALESCE(
+      (SELECT MIN((created_at AT TIME ZONE ${tz})::date) FROM checking_sessions),
+      (NOW() AT TIME ZONE ${tz})::date
+    )`;
+    let endDaySql = `(NOW() AT TIME ZONE ${tz})::date`;
+    if (startIso && endIso) {
+      startDaySql = `($1::timestamptz AT TIME ZONE ${tz})::date`;
+      endDaySql = `($2::timestamptz AT TIME ZONE ${tz})::date`;
+    } else if (startIso) {
+      startDaySql = `($1::timestamptz AT TIME ZONE ${tz})::date`;
+    } else if (endIso) {
+      startDaySql = `COALESCE(
+        (SELECT MIN((created_at AT TIME ZONE ${tz})::date) FROM checking_sessions),
+        ($1::timestamptz AT TIME ZONE ${tz})::date
+      )`;
+      endDaySql = `($1::timestamptz AT TIME ZONE ${tz})::date`;
+    }
+
+    const sessionFilterSql = sessionsWhereSql || 'WHERE TRUE';
+
     const timelineRes = await query(`
+      WITH days AS (
+        SELECT generate_series(${startDaySql}, ${endDaySql}, INTERVAL '1 day')::date AS day
+      ),
+      agg AS (
+        SELECT
+          (created_at AT TIME ZONE ${tz})::date AS day,
+          COUNT(*) as session_count,
+          COALESCE(SUM(total_rows), 0) as total_leads,
+          COALESCE(SUM(clean_count), 0) as clean_leads,
+          COALESCE(SUM(clean_count + bla_dnc_count), 0) as bla_checked_leads,
+          COALESCE(SUM(local_dnc_count + bla_dnc_count), 0) as dnc_leads,
+          COALESCE(SUM(local_dnc_count), 0) as local_dnc_leads,
+          COALESCE(SUM(bla_dnc_count), 0) as bla_dnc_leads,
+          COALESCE(SUM(invalid_numbers), 0) as invalid_leads,
+          COALESCE(SUM(duplicate_numbers), 0) as duplicate_leads,
+          COALESCE(SUM(api_calls_saved), 0) as api_saved
+        FROM checking_sessions
+        ${sessionFilterSql}
+        GROUP BY 1
+      )
       SELECT
-        TO_CHAR(created_at, 'YYYY-MM-DD') as day,
-        COUNT(*) as session_count,
-        COALESCE(SUM(total_rows), 0) as total_leads,
-        COALESCE(SUM(clean_count), 0) as clean_leads,
-        COALESCE(SUM(clean_count + bla_dnc_count), 0) as bla_checked_leads,
-        COALESCE(SUM(local_dnc_count + bla_dnc_count), 0) as dnc_leads,
-        COALESCE(SUM(local_dnc_count), 0) as local_dnc_leads,
-        COALESCE(SUM(bla_dnc_count), 0) as bla_dnc_leads,
-        COALESCE(SUM(invalid_numbers), 0) as invalid_leads,
-        COALESCE(SUM(duplicate_numbers), 0) as duplicate_leads,
-        COALESCE(SUM(api_calls_saved), 0) as api_saved
-      FROM checking_sessions
-      ${timelineWhere}
-      GROUP BY TO_CHAR(created_at, 'YYYY-MM-DD')
-      ORDER BY day ASC
-    `, sessionsWhereSql ? params : []);
+        TO_CHAR(d.day, 'YYYY-MM-DD') as day,
+        COALESCE(a.session_count, 0) as session_count,
+        COALESCE(a.total_leads, 0) as total_leads,
+        COALESCE(a.clean_leads, 0) as clean_leads,
+        COALESCE(a.bla_checked_leads, 0) as bla_checked_leads,
+        COALESCE(a.dnc_leads, 0) as dnc_leads,
+        COALESCE(a.local_dnc_leads, 0) as local_dnc_leads,
+        COALESCE(a.bla_dnc_leads, 0) as bla_dnc_leads,
+        COALESCE(a.invalid_leads, 0) as invalid_leads,
+        COALESCE(a.duplicate_leads, 0) as duplicate_leads,
+        COALESCE(a.api_saved, 0) as api_saved
+      FROM days d
+      LEFT JOIN agg a ON a.day = d.day
+      ORDER BY d.day ASC
+    `, timelineParams);
 
     // 3. Recent Sessions (with date filter if applied)
     const recentSessionsRes = await query(`

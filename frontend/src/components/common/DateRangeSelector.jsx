@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { APP_TZ_LABEL, formatYmd, getPresetRanges, getZonedParts, rangeFromYmd } from '../../utils/timezone';
 
 export function DateRangeSelector({ value, onChange }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -20,60 +21,7 @@ export function DateRangeSelector({ value, onChange }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Compute date ranges based on today
-  const getComputedRanges = () => {
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const formatDate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-    // Today
-    const todayStr = formatDate(now);
-
-    // Yesterday
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    const yesterdayStr = formatDate(yesterday);
-
-    // This Week (Monday to Sunday)
-    const dayOfWeek = now.getDay() === 0 ? 7 : now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (dayOfWeek - 1));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const thisWeekStr = `${formatDate(monday)} – ${formatDate(sunday)}`;
-
-    // Last Week
-    const lastMonday = new Date(monday);
-    lastMonday.setDate(monday.getDate() - 7);
-    const lastSunday = new Date(sunday);
-    lastSunday.setDate(sunday.getDate() - 7);
-    const lastWeekStr = `${formatDate(lastMonday)} – ${formatDate(lastSunday)}`;
-
-    // This Month
-    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    const thisMonthStr = `${formatDate(thisMonthStart)} – ${formatDate(thisMonthEnd)}`;
-
-    // Last Month
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
-    const lastMonthStr = `${formatDate(lastMonthStart)} – ${formatDate(lastMonthEnd)}`;
-
-    // Helpers to get local start and end of day as accurate ISO timestamps
-    const toStartIso = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).toISOString();
-    const toEndIso = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999).toISOString();
-
-    return {
-      today: { label: 'Today', dateString: todayStr, start: toStartIso(now), end: toEndIso(now) },
-      yesterday: { label: 'Yesterday', dateString: yesterdayStr, start: toStartIso(yesterday), end: toEndIso(yesterday) },
-      this_week: { label: 'This Week', dateString: thisWeekStr, start: toStartIso(monday), end: toEndIso(sunday) },
-      last_week: { label: 'Last Week', dateString: lastWeekStr, start: toStartIso(lastMonday), end: toEndIso(lastSunday) },
-      this_month: { label: 'This Month', dateString: thisMonthStr, start: toStartIso(thisMonthStart), end: toEndIso(thisMonthEnd) },
-      last_month: { label: 'Last Month', dateString: lastMonthStr, start: toStartIso(lastMonthStart), end: toEndIso(lastMonthEnd) },
-    };
-  };
-
-  const ranges = getComputedRanges();
+  const ranges = getPresetRanges();
 
   const options = [
     { id: 'today', label: 'Today', dates: ranges.today.dateString, payload: ranges.today },
@@ -82,13 +30,16 @@ export function DateRangeSelector({ value, onChange }) {
     { id: 'last_week', label: 'Last Week', dates: ranges.last_week.dateString, payload: ranges.last_week },
     { id: 'this_month', label: 'This Month', dates: ranges.this_month.dateString, payload: ranges.this_month },
     { id: 'last_month', label: 'Last Month', dates: ranges.last_month.dateString, payload: ranges.last_month },
+    { id: 'all', label: 'All time', dates: 'Every session', payload: { start: null, end: null } },
     { id: 'custom', label: 'Custom Range', dates: null, isCustom: true },
   ];
 
   const currentSelection = value?.id || 'today';
   const currentLabel =
     value?.id === 'custom'
-      ? `${value.startDate ? new Date(value.startDate).toLocaleDateString() : 'Start'} – ${value.endDate ? new Date(value.endDate).toLocaleDateString() : 'End'}`
+      ? (value.startDate && value.endDate
+        ? `${formatYmd(getZonedParts(new Date(value.startDate)))} – ${formatYmd(getZonedParts(new Date(value.endDate)))}`
+        : 'Custom Range')
       : options.find((o) => o.id === currentSelection)?.label || 'Today';
 
   const handleSelect = (opt) => {
@@ -116,11 +67,12 @@ export function DateRangeSelector({ value, onChange }) {
     if (onChange) {
       const [sY, sM, sD] = customStart.split('-').map(Number);
       const [eY, eM, eD] = customEnd.split('-').map(Number);
+      const custom = rangeFromYmd({ year: sY, month: sM, day: sD }, { year: eY, month: eM, day: eD });
       onChange({
         id: 'custom',
         label: 'Custom Range',
-        startDate: new Date(sY, sM - 1, sD, 0, 0, 0, 0).toISOString(),
-        endDate: new Date(eY, eM - 1, eD, 23, 59, 59, 999).toISOString(),
+        startDate: custom.start,
+        endDate: custom.end,
       });
     }
   };
@@ -137,6 +89,7 @@ export function DateRangeSelector({ value, onChange }) {
       >
         <Calendar className="w-4 h-4 text-amber-400" />
         <span className="text-zinc-100">{currentLabel}</span>
+        <span className="hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-500 sm:inline">{APP_TZ_LABEL}</span>
         {isOpen ? (
           <ChevronUp className="w-4 h-4 text-zinc-400 ml-0.5" />
         ) : (
@@ -149,6 +102,9 @@ export function DateRangeSelector({ value, onChange }) {
         <div className="absolute right-0 mt-2 w-80 card p-2 z-50 shadow-2xl animate-fade-in-up" role="menu">
           {!isCustomMode ? (
             <div className="space-y-1">
+              <p className="px-3.5 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                {APP_TZ_LABEL} · America/New_York
+              </p>
               {options.map((opt) => {
                 const isSelected = currentSelection === opt.id;
                 return (

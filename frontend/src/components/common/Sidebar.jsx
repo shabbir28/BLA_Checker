@@ -62,7 +62,7 @@ export function Sidebar({ activeTab, setActiveTab, isOpen, onClose }) {
       )}
 
       <aside
-        className={`fixed bottom-0 left-0 top-0 z-40 flex w-64 flex-col border-r border-surface-border bg-surface-page transition-transform duration-300 md:translate-x-0 ${
+        className={`fixed bottom-0 left-0 top-0 z-40 flex w-64 flex-col border-r border-surface-border bg-surface-page/55 backdrop-blur-xl transition-transform duration-300 md:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >

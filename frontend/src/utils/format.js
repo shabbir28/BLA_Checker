@@ -1,3 +1,5 @@
+import { APP_TZ } from './timezone';
+
 const compactFormatter = new Intl.NumberFormat('en-US', {
   notation: 'compact',
   maximumFractionDigits: 1,
@@ -33,9 +35,25 @@ export function formatCurrency(value) {
 
 export function formatDateShort(isoDay) {
   if (!isoDay) return '';
-  const d = new Date(`${isoDay}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return isoDay;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const [y, m, d] = String(isoDay).slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return isoDay;
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+export function formatDate(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('en-US', {
+    timeZone: APP_TZ,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 export function formatDateTime(value) {
@@ -43,11 +61,13 @@ export function formatDateTime(value) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleString('en-US', {
+    timeZone: APP_TZ,
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZoneName: 'short',
   });
 }
 

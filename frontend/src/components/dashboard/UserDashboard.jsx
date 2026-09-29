@@ -4,6 +4,8 @@ import MetricCard from '../common/MetricCard';
 import StatusBadge from '../common/StatusBadge';
 import LoadingSpinner from '../common/LoadingSpinner';
 import DateRangeSelector from '../common/DateRangeSelector';
+import { thisWeekRange } from '../../utils/timezone';
+import { formatDate } from '../../utils/format';
 import {
   FileCheck,
   ShieldCheck,
@@ -34,17 +36,7 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
       setDownloadingId(null);
     }
   };
-  const [dateRange, setDateRange] = useState(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0).toISOString();
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
-    return {
-      id: 'today',
-      label: 'Today',
-      startDate: start,
-      endDate: end,
-    };
-  });
+  const [dateRange, setDateRange] = useState(thisWeekRange);
 
   const fetchUserSessions = async (selectedRange = dateRange) => {
     try {
@@ -238,7 +230,7 @@ export function UserDashboard({ onSelectSession, onOpenNewScrub }) {
                       <StatusBadge status={session.status} size="xs" />
                     </td>
                     <td className="py-3 text-right text-zinc-500 text-[11px]">
-                      {new Date(session.created_at).toLocaleDateString()}
+                      {formatDate(session.created_at)}
                     </td>
                     <td className="py-3 pr-3 text-right font-sans">
                       <div className="flex items-center justify-end gap-2">

@@ -19,7 +19,7 @@ export function ChartTooltip({
   if (rows.length === 0) return null;
 
   return (
-    <div className="min-w-[160px] rounded-xl border border-surface-border-strong bg-[#0c0c0e]/95 px-3.5 py-3 shadow-2xl backdrop-blur">
+    <div className="min-w-[160px] rounded-xl border border-surface-border-strong bg-surface-card/95 px-3.5 py-3 shadow-2xl backdrop-blur">
       {label !== undefined && label !== null && (
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
           {labelFormatter ? labelFormatter(label) : label}

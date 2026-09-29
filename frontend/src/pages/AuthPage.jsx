@@ -56,10 +56,13 @@ export function AuthPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-page text-white grid grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
+    <div className="relative min-h-screen bg-surface-page text-white">
+      <div aria-hidden className="pointer-events-none fixed inset-0 bg-black-dots" />
+      <div aria-hidden className="pointer-events-none fixed inset-0 bg-glow" />
+
+      <div className="relative grid min-h-screen grid-cols-1 lg:grid-cols-[1.1fr_1fr]">
       {/* ---------- Left: Branding panel ---------- */}
-      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden border-r border-surface-border bg-black-dots">
-        <div className="absolute inset-0 bg-glow pointer-events-none" />
+      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden border-r border-surface-border">
 
         <div className="relative z-10 p-10 xl:p-14">
           <div className="flex items-center gap-3">
@@ -197,6 +200,7 @@ export function AuthPage() {
           </p>
         </div>
       </main>
+      </div>
     </div>
   );
 }
