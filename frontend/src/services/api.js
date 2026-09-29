@@ -130,6 +130,11 @@ export const adminApi = {
   updateApiConfig: (data) => api.put('/admin/api-config', data),
   testConnection: (data) => api.post('/admin/test-connection', data),
   getAuditLogs: (params) => api.get('/admin/audit-logs', { params }),
+  getSecurity: () => api.get('/admin/security'),
+  updateSecurity: (data) => api.put('/admin/security', data),
+  addAllowedIp: (data) => api.post('/admin/security/ips', data),
+  updateAllowedIp: (id, data) => api.patch(`/admin/security/ips/${id}`, data),
+  removeAllowedIp: (id) => api.delete(`/admin/security/ips/${id}`),
 };
 
 export default api;

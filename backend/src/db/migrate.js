@@ -136,6 +136,31 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
     `);
 
+    // 7. IP allowlist (off by default — enabling without IPs is rejected in the API)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS security_settings (
+        id INT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+        ip_allowlist_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO security_settings (id, ip_allowlist_enabled)
+      VALUES (1, FALSE)
+      ON CONFLICT (id) DO NOTHING;
+
+      CREATE TABLE IF NOT EXISTS allowed_ips (
+        id SERIAL PRIMARY KEY,
+        ip_address VARCHAR(64) NOT NULL UNIQUE,
+        label VARCHAR(255),
+        status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+        created_by INT REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_allowed_ips_address ON allowed_ips(ip_address);
+      ALTER TABLE allowed_ips ALTER COLUMN label TYPE VARCHAR(255);
+      ALTER TABLE allowed_ips ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'active';
+      CREATE INDEX IF NOT EXISTS idx_allowed_ips_status ON allowed_ips(status);
+    `);
+
     await client.query('COMMIT');
     console.log('[MIGRATION] All tables and indexes created successfully!');
   } catch (error) {

@@ -7,6 +7,7 @@ import {
   Database,
   Users,
   ShieldCheck,
+  Shield,
   X,
   LogOut,
 } from 'lucide-react';
@@ -18,7 +19,10 @@ const MAIN_NAV = [
   { id: 'dnc', label: 'DNC Upload', icon: Database, adminOnly: true },
 ];
 
-const ADMIN_NAV = [{ id: 'users', label: 'Users', icon: Users }];
+const ADMIN_NAV = [
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'security', label: 'Security', icon: Shield },
+];
 
 function NavItem({ item, active, onSelect }) {
   const Icon = item.icon;

@@ -8,6 +8,7 @@ const PAGES = {
   sessions: { title: 'Sessions', subtitle: 'Every uploaded file and its results' },
   dnc: { title: 'DNC Upload', subtitle: 'Your internal Do Not Call suppression list' },
   users: { title: 'Users', subtitle: 'Accounts and roles' },
+  security: { title: 'Security', subtitle: 'Allow only selected IPs to reach this server' },
 };
 
 export function Navbar({ onToggleSidebar, activeTab }) {

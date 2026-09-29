@@ -4,6 +4,7 @@ import Navbar from './components/common/Navbar';
 import Sidebar from './components/common/Sidebar';
 import LoadingSpinner from './components/common/LoadingSpinner';
 import AuthPage from './pages/AuthPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 // Views
 import AdminDashboard from './components/dashboard/AdminDashboard';
@@ -12,6 +13,7 @@ import SessionDetails from './components/leads/SessionDetails';
 import MasterDncManager from './components/dnc/MasterDncManager';
 import SessionsView from './components/sessions/SessionsView';
 import UserManagement from './components/admin/UserManagement';
+import SecurityView from './components/security/SecurityView';
 
 function MainApp() {
   const { user, loading, isAdmin } = useAuth();
@@ -26,13 +28,26 @@ function MainApp() {
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState(null);
+  const [accessBlocked, setAccessBlocked] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/health', { cache: 'no-store' })
+      .then((r) => {
+        if (r.status === 404) setAccessBlocked(true);
+      })
+      .catch(() => {});
+  }, []);
 
   // If a regular (non-admin) user is logged in, ensure they are strictly on 'leads' tab
   useEffect(() => {
-    if (user && !isAdmin && activeTab !== 'leads') {
+    if (user && !isAdmin && !['leads'].includes(activeTab)) {
       setActiveTab('leads');
     }
   }, [user, isAdmin, activeTab]);
+
+  if (accessBlocked) {
+    return <NotFoundPage />;
+  }
 
   if (loading) {
     return (
@@ -117,6 +132,8 @@ function MainApp() {
           {activeTab === 'dnc' && isAdmin && <MasterDncManager />}
 
           {activeTab === 'users' && isAdmin && <UserManagement />}
+
+          {activeTab === 'security' && isAdmin && <SecurityView />}
         </main>
       </div>
     </div>
