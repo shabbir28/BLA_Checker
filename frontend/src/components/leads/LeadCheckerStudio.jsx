@@ -20,6 +20,8 @@ import {
   Zap,
   ShieldCheck,
   ListChecks,
+  Ban,
+  Copy,
 } from 'lucide-react';
 
 const STEPS = [
@@ -76,6 +78,19 @@ function StepTracker({ current }) {
         );
       })}
     </ol>
+  );
+}
+
+function ResultTiles({ session, cleanHint }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <StatTile label="Total in file" value={formatNumber(session.total_rows)} hint="All uploaded rows" icon={FileText} />
+      <StatTile label="Invalid" value={formatNumber(session.invalid_numbers)} hint="Not a valid phone" icon={Ban} />
+      <StatTile label="Duplicates" value={formatNumber(session.duplicate_numbers)} hint="Repeat in this file" icon={Copy} />
+      <StatTile label="Already in DNC" value={formatNumber(session.local_dnc_count)} hint="Skipped BLA API" tone="amber" icon={Database} />
+      <StatTile label="DNC from BLA" value={formatNumber(session.bla_dnc_count)} hint="Saved to Master DNC" tone="red" icon={Zap} />
+      <StatTile label="Clean numbers" value={formatNumber(session.clean_count)} hint={cleanHint} tone="emerald" icon={ShieldCheck} />
+    </div>
   );
 }
 
@@ -464,11 +479,8 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatTile label="Total in file" value={formatNumber(activeSession.total_rows)} hint="Uploaded numbers" icon={FileText} />
-            <StatTile label="Already in DNC" value={formatNumber(activeSession.local_dnc_count)} hint="Skipped BLA API" tone="amber" icon={Database} />
-            <StatTile label="DNC from BLA" value={formatNumber(activeSession.bla_dnc_count)} hint="Added to Master DNC" tone="red" icon={Zap} />
-            <StatTile label="Clean numbers" value={formatNumber(activeSession.clean_count)} hint="Safe to dial" tone="emerald" icon={ShieldCheck} />
+          <div className="mt-6">
+            <ResultTiles session={activeSession} cleanHint="Safe to dial" />
           </div>
 
           {errorMsg && (
@@ -500,16 +512,15 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             </p>
           </header>
 
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <StatTile label="Total in file" value={formatNumber(activeSession.total_rows)} hint="Uploaded numbers" icon={FileText} />
-            <StatTile label="Already in DNC" value={formatNumber(activeSession.local_dnc_count)} hint="Skipped BLA API" tone="amber" icon={Database} />
-            <StatTile label="DNC from BLA" value={formatNumber(activeSession.bla_dnc_count)} hint="Saved to Master DNC" tone="red" icon={Zap} />
-            <StatTile label="Clean numbers" value={formatNumber(activeSession.clean_count)} hint={`${cleanRate.toFixed(1)}% of file`} tone="emerald" icon={ShieldCheck} />
-          </div>
+          <ResultTiles session={activeSession} cleanHint={`${cleanRate.toFixed(1)}% of file`} />
+          <p className="mt-3 text-center text-[11px] text-zinc-500">
+            Total = Invalid + Duplicates + Already in DNC + DNC from BLA + Clean.
+            Invalid and duplicate rows are not sent to BLA.
+          </p>
 
           <div className="card-raised mt-6 p-5 text-center">
             <h3 className="text-sm font-semibold text-white">Download your results</h3>
-            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns. The full report includes every number and its status.</p>
+            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns.</p>
             
             {downloadError && (
               <div className="alert-error mt-4 text-left" role="alert">
@@ -539,14 +550,6 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
               >
                 {downloading === 'clean-xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 text-emerald-400" />}
                 Clean numbers (Excel)
-              </button>
-              <button
-                onClick={() => handleDownload('full', 'csv')}
-                disabled={Boolean(downloading)}
-                className="btn-ghost"
-              >
-                {downloading === 'full-csv' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Full report (CSV)
               </button>
             </div>
           </div>

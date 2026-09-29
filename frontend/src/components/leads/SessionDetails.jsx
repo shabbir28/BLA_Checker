@@ -150,6 +150,8 @@ export function SessionDetails({ sessionId, onBack }) {
 
   const summary = [
     { label: 'Total in file', value: session.total_rows, cls: 'text-white' },
+    { label: 'Invalid', value: session.invalid_numbers, cls: 'text-zinc-200' },
+    { label: 'Duplicates', value: session.duplicate_numbers, cls: 'text-zinc-200' },
     { label: 'Already in DNC', value: session.local_dnc_count, cls: 'text-amber-300' },
     { label: 'DNC from BLA', value: session.bla_dnc_count, cls: 'text-red-300' },
     { label: 'Clean numbers', value: session.clean_count, cls: 'text-emerald-300', hint: `${cleanRate.toFixed(1)}% of file` },
@@ -257,7 +259,7 @@ export function SessionDetails({ sessionId, onBack }) {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           {summary.map((s) => (
             <div key={s.label} className="card-raised p-3.5">
               <span className="block text-[11px] text-zinc-500">{s.label}</span>
