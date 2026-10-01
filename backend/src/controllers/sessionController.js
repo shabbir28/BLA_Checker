@@ -355,6 +355,17 @@ export async function exportSessionClean(req, res) {
     }
 
     const safeSessionName = session.session_name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanCount = parseInt(session.clean_count, 10);
+
+    if (format === 'xlsx' && cleanCount > 200000) {
+      return res.status(400).json({
+        message: 'This file is too large for Excel. Download Clean numbers (CSV), then open that CSV in Excel.',
+      });
+    }
+
+    if (String(req.query.check || '') === '1') {
+      return res.json({ ok: true, filename: `${safeSessionName}_CLEAN.${format === 'xlsx' ? 'xlsx' : 'csv'}` });
+    }
 
     if (format === 'xlsx') {
       const recordsRes = await query(

@@ -86,38 +86,31 @@ export const sessionApi = {
   },
   downloadExport: async (id, type = 'clean', format = 'csv') => {
     const token = localStorage.getItem('bla_token') || '';
-    const res = await fetch(`/api/sessions/${id}/export/${type}?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`, {
+    const fileUrl = `/api/sessions/${id}/export/${type}?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+    const check = await fetch(`${fileUrl}&check=1`, {
       cache: 'no-store',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
-    if (!res.ok) {
-      let message = 'Failed to download export file.';
+    if (!check.ok) {
+      let message = `Server responded with error status ${check.status}`;
       try {
-        const errJson = await res.json();
+        const errJson = await check.json();
         if (errJson.message) message = errJson.message;
-      } catch (e) {
-        message = `Server responded with error status ${res.status}`;
+      } catch {
+        /* response was not JSON */
       }
       throw new Error(message);
     }
 
-    const blob = await res.blob();
-    const disposition = res.headers.get('Content-Disposition');
-    let filename = `session_${type}_${id}.${format}`;
-    if (disposition && disposition.includes('filename=')) {
-      const match = disposition.match(/filename="?([^";]+)"?/);
-      if (match && match[1]) filename = match[1];
-    }
-
-    const blobUrl = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(blobUrl);
-    document.body.removeChild(a);
+    // Hand the file to the browser download manager. fetch()+blob() keeps the
+    // whole file in memory and fails with ERR_FAILED on files of this size.
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
+    iframe.src = fileUrl;
+    document.body.appendChild(iframe);
+    window.setTimeout(() => iframe.remove(), 30 * 60 * 1000);
   },
 };
 
