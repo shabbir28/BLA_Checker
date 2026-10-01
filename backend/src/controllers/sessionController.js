@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import xlsx from 'xlsx';
-import { query } from '../config/db.js';
+import { pool, query } from '../config/db.js';
 import scrubbingEngine from '../services/scrubbingEngine.js';
 import { UPLOADS_DIR } from '../config/uploads.js';
 
@@ -240,6 +240,75 @@ export async function getSessionRecords(req, res) {
   }
 }
 
+function csvEscape(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function markDownload(res) {
+  res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.setHeader('ETag', `"dl-${Date.now()}-${Math.random().toString(36).slice(2)}"`);
+}
+
+function writeChunk(res, chunk) {
+  if (res.write(chunk)) return Promise.resolve();
+  return new Promise((resolve) => res.once('drain', resolve));
+}
+
+async function streamCsv(res, { filename, sql, params, mapRow, emptyMessage }) {
+  const client = await pool.connect();
+  let started = false;
+  try {
+    await client.query('BEGIN');
+    await client.query(`DECLARE export_cur NO SCROLL CURSOR FOR ${sql}`, params);
+
+    let headerKeys = null;
+    for (;;) {
+      const batch = await client.query('FETCH 5000 FROM export_cur');
+      if (batch.rows.length === 0) break;
+
+      let chunk = '';
+      for (const raw of batch.rows) {
+        const row = mapRow(raw);
+        if (!headerKeys) {
+          headerKeys = Object.keys(row);
+          chunk += headerKeys.map(csvEscape).join(',') + '\n';
+        }
+        chunk += headerKeys.map((key) => csvEscape(row[key])).join(',') + '\n';
+      }
+
+      if (!started) {
+        markDownload(res);
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.flushHeaders?.();
+        started = true;
+      }
+      await writeChunk(res, chunk);
+    }
+
+    await client.query('CLOSE export_cur');
+    await client.query('COMMIT');
+
+    if (!started) {
+      return res.status(400).json({ message: emptyMessage });
+    }
+    return res.end();
+  } catch (error) {
+    try { await client.query('ROLLBACK'); } catch { /* cursor already closed */ }
+    console.error('[SESSION] CSV stream error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ message: 'Failed to export: ' + error.message });
+    }
+    res.destroy(error);
+    return undefined;
+  } finally {
+    client.release();
+  }
+}
+
 export async function exportSessionClean(req, res) {
   try {
     const { id } = req.params;
@@ -285,54 +354,47 @@ export async function exportSessionClean(req, res) {
       });
     }
 
-    const recordsRes = await query(
-      `SELECT raw_phone, normalized_phone, original_row_data
-       FROM session_records
-       WHERE session_id = $1 AND status = 'CLEAN'
-       ORDER BY id ASC`,
-      [id]
-    );
-
-    const rows = recordsRes.rows;
-    if (rows.length === 0) {
-      return res.status(400).json({
-        message: 'No clean records found for this session.',
-      });
-    }
-
-    const exportData = rows.map((r) => {
-      const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
-      return {
-        ...orig,
-        'Clean_Phone': r.normalized_phone,
-        'Scrub_Status': 'CLEAN',
-      };
-    });
-
     const safeSessionName = session.session_name.replace(/[^a-zA-Z0-9_-]/g, '_');
 
     if (format === 'xlsx') {
+      const recordsRes = await query(
+        `SELECT raw_phone, normalized_phone, original_row_data
+         FROM session_records
+         WHERE session_id = $1 AND status = 'CLEAN'
+         ORDER BY id ASC`,
+        [id]
+      );
+      const exportData = recordsRes.rows.map((r) => {
+        const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
+        return { ...orig, Clean_Phone: r.normalized_phone, Scrub_Status: 'CLEAN' };
+      });
+      if (exportData.length === 0) {
+        return res.status(400).json({ message: 'No clean records found for this session.' });
+      }
       const worksheet = xlsx.utils.json_to_sheet(exportData);
       const workbook = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(workbook, worksheet, 'Clean Leads');
       const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
+      markDownload(res);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_CLEAN.xlsx"`);
       return res.send(buffer);
     }
 
-    // Default CSV
-    let csv = '';
-    const headers = Object.keys(exportData[0]);
-    csv += headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
-    for (const row of exportData) {
-      csv += headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
-    }
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_CLEAN.csv"`);
-    return res.send(csv);
+    return streamCsv(res, {
+      filename: `${safeSessionName}_CLEAN.csv`,
+      sql: `SELECT normalized_phone, original_row_data
+            FROM session_records
+            WHERE session_id = $1 AND status = 'CLEAN'
+            ORDER BY id ASC`,
+      params: [id],
+      emptyMessage: 'No clean records found for this session.',
+      mapRow: (r) => {
+        const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
+        return { ...orig, Clean_Phone: r.normalized_phone, Scrub_Status: 'CLEAN' };
+      },
+    });
   } catch (error) {
     console.error('[SESSION] Clean export error:', error);
     return res.status(500).json({ message: 'Failed to export clean leads: ' + error.message });

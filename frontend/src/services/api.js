@@ -87,6 +87,7 @@ export const sessionApi = {
   downloadExport: async (id, type = 'clean', format = 'csv') => {
     const token = localStorage.getItem('bla_token') || '';
     const res = await fetch(`/api/sessions/${id}/export/${type}?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`, {
+      cache: 'no-store',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 
