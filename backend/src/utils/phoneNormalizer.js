@@ -72,17 +72,6 @@ export function normalizePhone(rawPhone) {
     };
   }
 
-  // International or non-standard 11-15 digits
-  if (digits.length >= 7 && digits.length <= 15) {
-    return {
-      isValid: true,
-      raw: rawStr,
-      normalized: digits,
-      formatted: `+${digits}`,
-      reason: null,
-    };
-  }
-
   return {
     isValid: false,
     raw: rawStr,

@@ -23,6 +23,7 @@ class BlaService {
       const { query: dbQuery } = await import('../config/db.js');
       const dbRes = await dbQuery('SELECT * FROM api_configurations WHERE service_name = $1 LIMIT 1', ['BLA_API']);
       if (dbRes.rows.length > 0) {
+        const row = dbRes.rows[0];
         if (row.base_url && !row.base_url.includes('externalbla.com')) {
           apiUrl = row.base_url;
         } else {
@@ -261,54 +262,45 @@ class BlaService {
     try {
       const targetUrl = this.buildRequestUrl(config);
 
-      // Test with sample numbers: 2223334444 (good) and 9999999999 (known blacklisted)
+      // One number is enough. Active only when BLA's own status field is "success".
       const testRes = await axios.post(
         targetUrl,
-        { phones: ['2223334444', '9999999999'] },
+        { phones: ['2223334444'] },
         {
           headers: { 'Content-Type': 'application/json' },
           timeout: 8000,
+          validateStatus: () => true,
         }
       );
 
       const latencyMs = Date.now() - startTime;
-      const bodyStatus = testRes.data?.status ? String(testRes.data.status).toLowerCase() : null;
-      if (bodyStatus && bodyStatus !== 'success') {
-        return {
-          success: false,
-          isMock: false,
-          latencyMs,
-          message: `Blacklist Alliance rejected the request: ${testRes.data.message || testRes.data.status}`,
-          statusCode: testRes.status,
-          sampleResult: testRes.data,
-        };
-      }
-
-      if (testRes.status === 200) {
-        return {
-          success: true,
-          isMock: false,
-          latencyMs,
-          message: `Live Blacklist Alliance API connected successfully! (${latencyMs}ms latency)`,
-          statusCode: testRes.status,
-          sampleResult: testRes.data,
-        };
-      }
+      const data = testRes.data;
+      const blaStatus = data && typeof data === 'object' && data.status != null
+        ? String(data.status).toLowerCase()
+        : null;
+      const active = blaStatus === 'success';
+      const message = active
+        ? 'BLA active'
+        : (data && typeof data === 'object' && (data.message || data.error))
+          || (typeof data === 'string' && data.trim())
+          || (blaStatus ? `BLA status: ${blaStatus}` : 'BLA inactive');
 
       return {
-        success: false,
+        success: active,
         isMock: false,
         latencyMs,
-        message: `API returned unexpected status ${testRes.status}`,
+        message,
         statusCode: testRes.status,
+        blaStatus,
       };
     } catch (err) {
       return {
         success: false,
         isMock: false,
         latencyMs: Date.now() - startTime,
-        message: err.response?.data?.message || err.message,
+        message: err.message || 'BLA is not responding.',
         statusCode: err.response?.status || 500,
+        blaStatus: null,
       };
     }
   }

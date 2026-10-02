@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/db.js';
 import blaService from '../services/blaService.js';
 import { tzSqlLiteral } from '../utils/appTimezone.js';
+import { pageWindow } from '../utils/pagination.js';
 
 function toIsoOrNull(value) {
   if (!value) return null;
@@ -200,9 +201,7 @@ export async function getDashboardAnalytics(req, res) {
 
 export async function listUsers(req, res) {
   try {
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = pageWindow(req.query, 20, 100);
     const search = req.query.search?.trim();
 
     let whereSql = '';
@@ -444,9 +443,7 @@ export async function testApiConnection(req, res) {
 
 export async function getAuditLogs(req, res) {
   try {
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = pageWindow(req.query, 50, 200);
     const action = req.query.action?.trim();
     const search = req.query.search?.trim();
 

@@ -22,6 +22,9 @@ import {
   ListChecks,
   Ban,
   Copy,
+  ChevronLeft,
+  ChevronRight,
+  X,
 } from 'lucide-react';
 
 const STEPS = [
@@ -81,35 +84,59 @@ function StepTracker({ current }) {
   );
 }
 
-function ResultTiles({ session, cleanHint }) {
+const RESULT_CARDS = [
+  { key: 'ALL', label: 'Total in file', field: 'total_rows', hint: 'All uploaded rows', icon: FileText, tone: 'zinc' },
+  { key: 'INVALID', label: 'Invalid', field: 'invalid_numbers', hint: 'Not a valid phone', icon: Ban, tone: 'zinc' },
+  { key: 'DUPLICATE', label: 'Duplicates', field: 'duplicate_numbers', hint: 'Repeat in this file', icon: Copy, tone: 'zinc' },
+  { key: 'LOCAL_DNC', label: 'Already in DNC', field: 'local_dnc_count', hint: 'Skipped BLA API', icon: Database, tone: 'amber' },
+  { key: 'BLA_DNC', label: 'DNC from BLA', field: 'bla_dnc_count', hint: 'Saved to Master DNC', icon: Zap, tone: 'red' },
+  { key: 'CLEAN', label: 'Clean numbers', field: 'clean_count', hint: '', icon: ShieldCheck, tone: 'emerald' },
+];
+
+function ResultTiles({ session, cleanHint, selected, onSelect }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-      <StatTile label="Total in file" value={formatNumber(session.total_rows)} hint="All uploaded rows" icon={FileText} />
-      <StatTile label="Invalid" value={formatNumber(session.invalid_numbers)} hint="Not a valid phone" icon={Ban} />
-      <StatTile label="Duplicates" value={formatNumber(session.duplicate_numbers)} hint="Repeat in this file" icon={Copy} />
-      <StatTile label="Already in DNC" value={formatNumber(session.local_dnc_count)} hint="Skipped BLA API" tone="amber" icon={Database} />
-      <StatTile label="DNC from BLA" value={formatNumber(session.bla_dnc_count)} hint="Saved to Master DNC" tone="red" icon={Zap} />
-      <StatTile label="Clean numbers" value={formatNumber(session.clean_count)} hint={cleanHint} tone="emerald" icon={ShieldCheck} />
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      {RESULT_CARDS.map((card) => (
+        <StatTile
+          key={card.key}
+          label={card.label}
+          value={formatNumber(session[card.field])}
+          hint={card.key === 'CLEAN' ? cleanHint : card.hint}
+          tone={card.tone}
+          icon={card.icon}
+          selected={selected === card.key}
+          onClick={onSelect ? () => onSelect(card) : undefined}
+        />
+      ))}
     </div>
   );
 }
 
-function StatTile({ label, value, hint, tone = 'zinc', icon: Icon }) {
+function StatTile({ label, value, hint, tone = 'zinc', icon: Icon, selected, onClick }) {
   const tones = {
     zinc: 'border-surface-border bg-surface-raised text-white',
     amber: 'border-amber-900/50 bg-amber-950/30 text-amber-300',
     red: 'border-red-900/50 bg-red-950/30 text-red-300',
     emerald: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
   };
-  return (
-    <div className={`rounded-xl border p-4 ${tones[tone]}`}>
-      <div className="flex items-center justify-between">
+  const className = `w-full rounded-xl border p-4 text-left ${tones[tone]} ${
+    onClick ? 'cursor-pointer transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40' : ''
+  } ${selected ? 'ring-2 ring-white/70' : ''}`;
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-medium opacity-80">{label}</span>
-        {Icon && <Icon className="h-3.5 w-3.5 opacity-70" />}
+        {Icon && <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />}
       </div>
       <span className="mt-1.5 block font-mono text-2xl font-bold leading-none">{value}</span>
       {hint && <span className="mt-1.5 block text-[11px] opacity-60">{hint}</span>}
-    </div>
+    </>
+  );
+  if (!onClick) return <div className={className}>{body}</div>;
+  return (
+    <button type="button" onClick={onClick} className={className} aria-pressed={selected}>
+      {body}
+    </button>
   );
 }
 
@@ -118,8 +145,10 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
 
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState('upload');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState(null);
+  const [blaActive, setBlaActive] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const [previewData, setPreviewData] = useState(null);
@@ -127,19 +156,56 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
   const [sessionName, setSessionName] = useState('');
 
   const [activeSession, setActiveSession] = useState(null);
-  const [pollInterval, setPollInterval] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
   const [starting, setStarting] = useState(false);
   const [downloading, setDownloading] = useState('');
   const [downloadError, setDownloadError] = useState(null);
+  const [cardView, setCardView] = useState(null);
+  const [cardRecords, setCardRecords] = useState([]);
+  const [cardLoading, setCardLoading] = useState(false);
+  const [cardError, setCardError] = useState(null);
+  const [cardPage, setCardPage] = useState(1);
+  const [cardPagination, setCardPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 1 });
 
   const fileInputRef = useRef(null);
+  const cardListRef = useRef(null);
+  const pollRef = useRef(null);
+  const activeSessionKey = 'bla_active_session_id';
 
   useEffect(() => {
     return () => {
-      if (pollInterval) clearInterval(pollInterval);
+      if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [pollInterval]);
+  }, []);
+
+  const loadCardRecords = async (status, page) => {
+    if (!activeSession) return;
+    try {
+      setCardLoading(true);
+      setCardError(null);
+      const res = await sessionApi.getRecords(activeSession.id, { page, limit: 25, status });
+      setCardRecords(res.data.data || []);
+      setCardPagination(res.data.pagination || { page, limit: 25, total: 0, totalPages: 1 });
+      setCardPage(page);
+    } catch (err) {
+      setCardRecords([]);
+      setCardError(err.response?.data?.message || 'Could not load these numbers.');
+    } finally {
+      setCardLoading(false);
+    }
+  };
+
+  const handleCardSelect = (card) => {
+    if (cardView?.key === card.key) {
+      setCardView(null);
+      return;
+    }
+    setCardView(card);
+    loadCardRecords(card.key, 1);
+    window.setTimeout(() => {
+      cardListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
+  };
 
   const handleDownload = async (type, format) => {
     if (!activeSession) return;
@@ -178,16 +244,29 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
     if (!file) return;
     try {
       setUploading(true);
+      setUploadPhase('upload');
       setUploadProgress(0);
       setUploadError(null);
+      setBlaActive(false);
 
       const formData = new FormData();
       formData.append('file', file);
 
+      const pingPromise = sessionApi.pingBla().catch(() => ({ data: { active: false, message: 'BLA is not responding.' } }));
       const res = await sessionApi.preview(formData, setUploadProgress);
+      setUploadPhase('ping');
+      const ping = await pingPromise;
+      if (!ping.data?.active) {
+        setBlaActive(false);
+        const status = ping.data?.status ? `BLA status: ${ping.data.status}` : 'BLA inactive';
+        const detail = ping.data?.message || 'Checking stopped.';
+        setUploadError(`${status}. ${detail}`);
+        return;
+      }
       setPreviewData(res.data);
       setSelectedColumn(res.data.detectedPhoneColumn || res.data.columns[0] || 'phone');
       setSessionName(`Check_${file.name.replace(/\.[^/.]+$/, '')}`);
+      setBlaActive(true);
       setCurrentStep(2);
     } catch (err) {
       console.error('[STUDIO] Preview error:', err);
@@ -196,6 +275,70 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
       setUploading(false);
     }
   };
+
+  const watchSession = (sessionId, celebrate) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    sessionStorage.setItem(activeSessionKey, sessionId);
+    const interval = setInterval(async () => {
+      try {
+        const checkRes = await sessionApi.get(sessionId);
+        const updated = checkRes.data.session;
+        setActiveSession(updated);
+
+        if (updated.status === 'COMPLETED') {
+          clearInterval(interval);
+          sessionStorage.removeItem(activeSessionKey);
+          setCurrentStep(4);
+          if (celebrate) {
+            try {
+              confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+            } catch {
+              /* confetti is optional */
+            }
+          }
+          if (onScrubComplete) onScrubComplete(updated);
+        } else if (updated.status === 'FAILED') {
+          clearInterval(interval);
+          sessionStorage.removeItem(activeSessionKey);
+          setErrorMsg(updated.error_message || 'Checking failed.');
+        }
+      } catch (pollErr) {
+        console.error('[STUDIO] Polling error:', pollErr);
+      }
+    }, 1000);
+    pollRef.current = interval;
+  };
+
+  useEffect(() => {
+    const savedId = sessionStorage.getItem(activeSessionKey);
+    if (!savedId) return undefined;
+    let cancelled = false;
+    sessionApi.get(savedId).then((res) => {
+      if (cancelled) return;
+      const session = res.data.session;
+      if (session.status === 'QUEUED' || session.status === 'PROCESSING') {
+        setActiveSession(session);
+        setCurrentStep(3);
+        watchSession(session.id, true);
+      } else if (session.status === 'COMPLETED') {
+        sessionStorage.removeItem(activeSessionKey);
+        setActiveSession(session);
+        setCurrentStep(4);
+      } else if (session.status === 'FAILED') {
+        sessionStorage.removeItem(activeSessionKey);
+        setActiveSession(session);
+        setCurrentStep(3);
+        setErrorMsg(session.error_message || 'Checking failed.');
+      } else {
+        sessionStorage.removeItem(activeSessionKey);
+      }
+    }).catch(() => {
+      sessionStorage.removeItem(activeSessionKey);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleStartChecking = async () => {
     if (starting) return;
@@ -212,30 +355,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
       const session = res.data.session;
       setActiveSession(session);
       setCurrentStep(3);
-
-      const interval = setInterval(async () => {
-        try {
-          const checkRes = await sessionApi.get(session.id);
-          const updated = checkRes.data.session;
-          setActiveSession(updated);
-
-          if (updated.status === 'COMPLETED') {
-            clearInterval(interval);
-            setCurrentStep(4);
-            try {
-              confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
-            } catch {}
-            if (onScrubComplete) onScrubComplete(updated);
-          } else if (updated.status === 'FAILED') {
-            clearInterval(interval);
-            setErrorMsg(updated.error_message || 'Checking failed.');
-          }
-        } catch (pollErr) {
-          console.error('[STUDIO] Polling error:', pollErr);
-        }
-      }, 1000);
-
-      setPollInterval(interval);
+      watchSession(session.id, true);
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to start checking.');
     } finally {
@@ -244,14 +364,20 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
   };
 
   const handleReset = () => {
-    if (pollInterval) clearInterval(pollInterval);
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
     setFile(null);
     setPreviewData(null);
     setActiveSession(null);
     setCurrentStep(1);
     setErrorMsg(null);
     setUploadError(null);
+    setBlaActive(false);
     setUploadProgress(0);
+    setCardView(null);
+    setCardRecords([]);
+    setCardError(null);
+    sessionStorage.removeItem(activeSessionKey);
   };
 
   const progress = Number(activeSession?.progress_percent) || 0;
@@ -260,6 +386,13 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
   return (
     <div className="space-y-5 animate-fade-in">
       <StepTracker current={currentStep} />
+
+      {blaActive && (
+        <div className="alert-success" role="status">
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+          <span className="font-semibold text-emerald-200">BLA active</span>
+        </div>
+      )}
 
       {/* ---------------- STEP 1: UPLOAD ---------------- */}
       {currentStep === 1 && (
@@ -326,7 +459,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
                 <div className="flex items-center justify-between text-xs">
                   <span className="flex items-center gap-2 font-medium text-zinc-200">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-400" />
-                    {uploadProgress < 100 ? 'Uploading file…' : 'Reading file structure…'}
+                    {uploadPhase === 'ping' ? 'Checking Blacklist Alliance…' : uploadProgress < 100 ? 'Uploading file…' : 'Reading file structure…'}
                   </span>
                   <span className="font-mono font-semibold text-emerald-300">{uploadProgress}%</span>
                 </div>
@@ -348,7 +481,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
                 {uploading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Reading…'}
+                    {uploadPhase === 'ping' ? 'Checking BLA…' : uploadProgress < 100 ? `Uploading ${uploadProgress}%` : 'Reading…'}
                   </>
                 ) : (
                   <>
@@ -512,7 +645,84 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             </p>
           </header>
 
-          <ResultTiles session={activeSession} cleanHint={`${cleanRate.toFixed(1)}% of file`} />
+          <ResultTiles
+            session={activeSession}
+            cleanHint={`${cleanRate.toFixed(1)}% of file`}
+            selected={cardView?.key}
+            onSelect={handleCardSelect}
+          />
+
+          {cardView && (
+            <div ref={cardListRef} className="card-raised mt-4 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-surface-border px-4 py-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-white">{cardView.label}</h3>
+                  <p className="text-[11px] text-zinc-500">
+                    {formatNumber(cardPagination.total)} number{cardPagination.total === 1 ? '' : 's'}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setCardView(null)} className="btn-icon" aria-label="Close number list">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {cardLoading ? (
+                <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-zinc-400">
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
+                  Loading numbers…
+                </div>
+              ) : cardError ? (
+                <div className="px-4 py-6 text-sm text-red-300">{cardError}</div>
+              ) : cardRecords.length === 0 ? (
+                <div className="px-4 py-8 text-center text-sm text-zinc-500">No numbers in this group.</div>
+              ) : (
+                <>
+                  <ul className="max-h-80 divide-y divide-surface-border overflow-y-auto">
+                    {cardRecords.map((rec) => (
+                      <li key={rec.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                          <p className="font-mono text-sm font-semibold text-white">{rec.raw_phone || '—'}</p>
+                          {rec.normalized_phone && rec.normalized_phone !== rec.raw_phone && (
+                            <p className="font-mono text-[11px] text-zinc-500">{rec.normalized_phone}</p>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-400 sm:max-w-[50%] sm:text-right">{rec.reason || 'Verified'}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  {cardPagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between border-t border-surface-border px-4 py-3 text-xs text-zinc-400">
+                      <span>
+                        Page <span className="font-mono text-zinc-200">{cardPage}</span> of{' '}
+                        <span className="font-mono text-zinc-200">{cardPagination.totalPages}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => loadCardRecords(cardView.key, cardPage - 1)}
+                          disabled={cardPage <= 1 || cardLoading}
+                          className="btn-icon"
+                          aria-label="Previous page"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => loadCardRecords(cardView.key, cardPage + 1)}
+                          disabled={cardPage >= cardPagination.totalPages || cardLoading}
+                          className="btn-icon"
+                          aria-label="Next page"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <p className="mt-3 text-center text-[11px] text-zinc-500">
             Total = Invalid + Duplicates + Already in DNC + DNC from BLA + Clean.
             Invalid and duplicate rows are not sent to BLA.

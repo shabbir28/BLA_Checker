@@ -50,6 +50,7 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [scopeFilter, setScopeFilter] = useState(isAdmin ? 'all' : 'mine');
@@ -80,6 +81,8 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
       try {
         if (!isSilent) setRefreshing(true);
         const params = { page, limit: 15 };
+        if (search) params.search = search;
+        if (statusFilter !== 'ALL') params.status = statusFilter;
         if (isAdmin && scopeFilter === 'all') params.scope = 'all';
         const res = await sessionApi.list(params);
         setSessions(res.data.data || []);
@@ -91,8 +94,13 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
         if (!isSilent) setRefreshing(false);
       }
     },
-    [page, scopeFilter, isAdmin]
+    [page, search, statusFilter, scopeFilter, isAdmin]
   );
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     fetchSessions();
@@ -120,17 +128,6 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
       setDeleting(false);
     }
   };
-
-  const filteredSessions = sessions.filter((s) => {
-    const q = search.toLowerCase();
-    const matchesSearch =
-      !q ||
-      s.session_name?.toLowerCase().includes(q) ||
-      s.original_filename?.toLowerCase().includes(q) ||
-      s.id?.toString().includes(q);
-    const matchesStatus = statusFilter === 'ALL' || s.status?.toUpperCase() === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
 
   const totals = sessions.reduce(
     (acc, s) => ({
@@ -176,13 +173,23 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
             <input
               type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={searchInput}
+              onChange={(e) => {
+                setSearchInput(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search by session or file name…"
               className="input input-with-icon py-2"
             />
           </div>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="select w-full py-2 sm:w-44">
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="select w-full py-2 sm:w-44"
+          >
             <option value="ALL">All statuses</option>
             <option value="COMPLETED">Completed</option>
             <option value="PROCESSING">Processing</option>
@@ -226,7 +233,7 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
         )}
         {loading ? (
           <LoadingSpinner message="Loading sessions…" />
-        ) : filteredSessions.length === 0 ? (
+        ) : sessions.length === 0 ? (
           <EmptyState
             icon={Layers}
             title="No sessions found"
@@ -264,7 +271,7 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredSessions.map((s) => {
+                {sessions.map((s) => {
                   const isProcessing = s.status === 'PROCESSING' || s.status === 'QUEUED';
                   return (
                     <tr key={s.id}>

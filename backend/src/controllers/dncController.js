@@ -3,6 +3,7 @@ import path from 'path';
 import xlsx from 'xlsx';
 import csvParser from 'csv-parser';
 import { query, pool } from '../config/db.js';
+import { pageWindow } from '../utils/pagination.js';
 import { normalizePhone, detectPhoneColumn } from '../utils/phoneNormalizer.js';
 import { copyIntoTable } from '../utils/bulkCopy.js';
 
@@ -147,9 +148,7 @@ export async function uploadMasterDnc(req, res) {
 
 export async function listMasterDnc(req, res) {
   try {
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = pageWindow(req.query, 50, 200);
     const search = req.query.search?.trim();
     const source = req.query.source?.trim();
 
@@ -302,31 +301,61 @@ export async function exportMasterDnc(req, res) {
     }
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-    const records = await query(
-      `SELECT phone_number, normalized_phone, source, campaign_or_file, notes, created_at
-       FROM master_dnc
-       ${whereSql}
-       ORDER BY created_at DESC
-       LIMIT 100000`,
-      params
-    );
+    const client = await pool.connect();
+    let started = false;
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `DECLARE dnc_cur NO SCROLL CURSOR FOR
+         SELECT phone_number, normalized_phone, source, campaign_or_file, notes, created_at
+         FROM master_dnc
+         ${whereSql}
+         ORDER BY created_at DESC`,
+        params
+      );
 
-    let csv = 'Phone Number,Normalized Phone,Source,Campaign or File,Notes,Date Added\n';
-    for (const r of records.rows) {
-      const line = [
-        `"${(r.phone_number || '').replace(/"/g, '""')}"`,
-        `"${(r.normalized_phone || '').replace(/"/g, '""')}"`,
-        `"${(r.source || '').replace(/"/g, '""')}"`,
-        `"${(r.campaign_or_file || '').replace(/"/g, '""')}"`,
-        `"${(r.notes || '').replace(/"/g, '""')}"`,
-        `"${new Date(r.created_at).toISOString()}"`,
-      ].join(',');
-      csv += line + '\n';
+      const quote = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+      for (;;) {
+        const batch = await client.query('FETCH 5000 FROM dnc_cur');
+        if (batch.rows.length === 0) break;
+        let chunk = '';
+        if (!started) {
+          chunk = 'Phone Number,Normalized Phone,Source,Campaign or File,Notes,Date Added\n';
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Content-Disposition', 'attachment; filename="master_dnc_export.csv"');
+          res.setHeader('Cache-Control', 'private, no-store');
+          res.flushHeaders?.();
+          started = true;
+        }
+        for (const r of batch.rows) {
+          chunk += [
+            quote(r.phone_number),
+            quote(r.normalized_phone),
+            quote(r.source),
+            quote(r.campaign_or_file),
+            quote(r.notes),
+            quote(r.created_at ? new Date(r.created_at).toISOString() : ''),
+          ].join(',') + '\n';
+        }
+        if (!res.write(chunk)) await new Promise((resolve) => res.once('drain', resolve));
+      }
+
+      await client.query('CLOSE dnc_cur');
+      await client.query('COMMIT');
+      if (!started) {
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="master_dnc_export.csv"');
+        res.write('Phone Number,Normalized Phone,Source,Campaign or File,Notes,Date Added\n');
+      }
+      return res.end();
+    } catch (streamErr) {
+      try { await client.query('ROLLBACK'); } catch { /* cursor already closed */ }
+      if (!res.headersSent) throw streamErr;
+      res.destroy(streamErr);
+      return undefined;
+    } finally {
+      client.release();
     }
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="master_dnc_export.csv"');
-    return res.send(csv);
   } catch (error) {
     console.error('[DNC] Export error:', error);
     return res.status(500).json({ message: 'Failed to export DNC database.' });

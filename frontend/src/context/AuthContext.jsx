@@ -23,6 +23,7 @@ export function AuthProvider({ children }) {
         try {
           const res = await authApi.getMe();
           setUser(res.data.user);
+          localStorage.setItem('bla_user', JSON.stringify(res.data.user));
         } catch (err) {
           console.error('[AUTH] Token validation failed:', err);
           localStorage.removeItem('bla_token');

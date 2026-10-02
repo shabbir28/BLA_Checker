@@ -315,6 +315,7 @@ class ScrubbingEngine {
       console.log(`[ENGINE] Bulk COPY of ${allRecords.length} session records...`);
       const recordClient = await pool.connect();
       try {
+        await recordClient.query('BEGIN');
         await copyIntoTable(
           recordClient,
           `COPY session_records
@@ -331,59 +332,64 @@ class ScrubbingEngine {
             r.bla_response_raw ? JSON.stringify(r.bla_response_raw) : null,
           ]
         );
+        await recordClient.query(
+          `UPDATE checking_sessions
+           SET status = 'COMPLETED',
+               stage = 'DONE',
+               bla_verified = TRUE,
+               progress_percent = 100,
+               total_rows = $1,
+               valid_numbers = $2,
+               invalid_numbers = $3,
+               duplicate_numbers = $4,
+               local_dnc_count = $5,
+               bla_dnc_count = $6,
+               clean_count = $7,
+               api_calls_saved = $8,
+               completed_at = NOW()
+           WHERE id = $9`,
+          [
+            totalRows,
+            validCount,
+            invalidCount,
+            duplicateCount,
+            localDncCount,
+            blaDncCount,
+            cleanCount,
+            apiCallsSaved,
+            sessionId,
+          ]
+        );
+        await recordClient.query('COMMIT');
+      } catch (saveErr) {
+        try { await recordClient.query('ROLLBACK'); } catch { /* transaction already closed */ }
+        throw saveErr;
       } finally {
         recordClient.release();
       }
 
-      // 8. Mark Session Completed
-      await query(
-        `UPDATE checking_sessions
-         SET status = 'COMPLETED',
-             stage = 'DONE',
-             bla_verified = TRUE,
-             progress_percent = 100,
-             total_rows = $1,
-             valid_numbers = $2,
-             invalid_numbers = $3,
-             duplicate_numbers = $4,
-             local_dnc_count = $5,
-             bla_dnc_count = $6,
-             clean_count = $7,
-             api_calls_saved = $8,
-             completed_at = NOW()
-         WHERE id = $9`,
-        [
-          totalRows,
-          validCount,
-          invalidCount,
-          duplicateCount,
-          localDncCount,
-          blaDncCount,
-          cleanCount,
-          apiCallsSaved,
-          sessionId,
-        ]
-      );
-
-      // Audit Log
-      await query(
-        `INSERT INTO audit_logs (user_id, user_email, action, resource_type, resource_id, details)
-         VALUES ($1, $2, 'LEAD_SCRUB_COMPLETED', 'SESSION', $3, $4)`,
-        [
-          user ? user.id : null,
-          user ? user.email : 'system',
-          sessionId,
-          JSON.stringify({
-            totalRows,
-            cleanCount,
-            localDncCount,
-            blaDncCount,
-            invalidCount,
-            apiCallsSaved,
-            durationMs: Date.now() - startTime,
-          }),
-        ]
-      );
+      try {
+        await query(
+          `INSERT INTO audit_logs (user_id, user_email, action, resource_type, resource_id, details)
+           VALUES ($1, $2, 'LEAD_SCRUB_COMPLETED', 'SESSION', $3, $4)`,
+          [
+            user ? user.id : null,
+            user ? user.email : 'system',
+            sessionId,
+            JSON.stringify({
+              totalRows,
+              cleanCount,
+              localDncCount,
+              blaDncCount,
+              invalidCount,
+              apiCallsSaved,
+              durationMs: Date.now() - startTime,
+            }),
+          ]
+        );
+      } catch (auditErr) {
+        console.error(`[ENGINE] Audit log failed for session ${sessionId}:`, auditErr.message);
+      }
 
       console.log(`[ENGINE] Session ${sessionId} completed successfully in ${Date.now() - startTime}ms!`);
     } catch (error) {

@@ -100,7 +100,7 @@ function initialsOf(name = '') {
 }
 
 export function UserManagement() {
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, refreshUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -155,6 +155,7 @@ export function UserManagement() {
       await adminApi.createUser(createForm);
       setIsCreateModalOpen(false);
       setCreateForm(EMPTY_CREATE);
+      setPage(1);
       fetchUsers(1, search);
     } catch (err) {
       setCreateError(err.response?.data?.message || 'Failed to create user account.');
@@ -177,6 +178,7 @@ export function UserManagement() {
       setEditSubmitting(true);
       setEditError(null);
       await adminApi.updateUser(selectedUser.id, editForm);
+      if (selectedUser.id === currentUser?.id) await refreshUser();
       setIsEditModalOpen(false);
       fetchUsers(page, search);
     } catch (err) {

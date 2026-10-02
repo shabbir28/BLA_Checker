@@ -25,6 +25,7 @@ export function SessionDetails({ sessionId, onBack }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState(null);
 
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +65,7 @@ export function SessionDetails({ sessionId, onBack }) {
     async (targetPage, targetStatus, targetSearch) => {
       try {
         setRecordsLoading(true);
+        setRecordsError(null);
         const res = await sessionApi.getRecords(sessionId, {
           page: targetPage,
           limit: PAGE_SIZE,
@@ -74,6 +76,8 @@ export function SessionDetails({ sessionId, onBack }) {
         setPagination(res.data.pagination);
       } catch (err) {
         console.error('[SESSION DETAILS] Fetch records error:', err);
+        setRecords([]);
+        setRecordsError(err.response?.data?.message || 'Could not load these numbers.');
       } finally {
         setRecordsLoading(false);
       }
@@ -149,12 +153,12 @@ export function SessionDetails({ sessionId, onBack }) {
   ];
 
   const summary = [
-    { label: 'Total in file', value: session.total_rows, cls: 'text-white' },
-    { label: 'Invalid', value: session.invalid_numbers, cls: 'text-zinc-200' },
-    { label: 'Duplicates', value: session.duplicate_numbers, cls: 'text-zinc-200' },
-    { label: 'Already in DNC', value: session.local_dnc_count, cls: 'text-amber-300' },
-    { label: 'DNC from BLA', value: session.bla_dnc_count, cls: 'text-red-300' },
-    { label: 'Clean numbers', value: session.clean_count, cls: 'text-emerald-300', hint: `${cleanRate.toFixed(1)}% of file` },
+    { id: 'ALL', label: 'Total in file', value: session.total_rows, cls: 'text-white' },
+    { id: 'INVALID', label: 'Invalid', value: session.invalid_numbers, cls: 'text-zinc-200' },
+    { id: 'DUPLICATE', label: 'Duplicates', value: session.duplicate_numbers, cls: 'text-zinc-200' },
+    { id: 'LOCAL_DNC', label: 'Already in DNC', value: session.local_dnc_count, cls: 'text-amber-300' },
+    { id: 'BLA_DNC', label: 'DNC from BLA', value: session.bla_dnc_count, cls: 'text-red-300' },
+    { id: 'CLEAN', label: 'Clean numbers', value: session.clean_count, cls: 'text-emerald-300', hint: `${cleanRate.toFixed(1)}% of file` },
   ];
 
   return (
@@ -259,14 +263,25 @@ export function SessionDetails({ sessionId, onBack }) {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          {summary.map((s) => (
-            <div key={s.label} className="card-raised p-3.5">
-              <span className="block text-[11px] text-zinc-500">{s.label}</span>
-              <span className={`mt-1 block font-mono text-xl font-bold leading-none ${s.cls}`}>{formatNumber(s.value)}</span>
-              {s.hint && <span className="mt-1 block text-[11px] text-zinc-600">{s.hint}</span>}
-            </div>
-          ))}
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          {summary.map((s) => {
+            const active = statusFilter === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => handleFilterChange(s.id)}
+                aria-pressed={active}
+                className={`card-raised p-3.5 text-left transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40 ${
+                  active ? 'ring-2 ring-white/70' : ''
+                }`}
+              >
+                <span className="block text-[11px] text-zinc-500">{s.label}</span>
+                <span className={`mt-1 block font-mono text-xl font-bold leading-none ${s.cls}`}>{formatNumber(s.value)}</span>
+                {s.hint && <span className="mt-1 block text-[11px] text-zinc-600">{s.hint}</span>}
+              </button>
+            );
+          })}
         </div>
       </section>
 
@@ -306,6 +321,11 @@ export function SessionDetails({ sessionId, onBack }) {
       <section className="card overflow-hidden">
         {recordsLoading ? (
           <LoadingSpinner message="Loading numbers…" />
+        ) : recordsError ? (
+          <div className="alert-error m-4" role="alert">
+            <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+            <span>{recordsError}</span>
+          </div>
         ) : records.length === 0 ? (
           <EmptyState icon={Phone} title="No numbers found" description="Try a different filter or search term." compact />
         ) : (

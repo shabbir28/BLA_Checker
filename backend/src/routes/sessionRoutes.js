@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import {
   previewLeadFile,
+  pingBla,
   startLeadSession,
   listSessions,
   getSession,
@@ -44,6 +45,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.post('/preview', upload.single('file'), previewLeadFile);
+router.get('/bla-ping', pingBla);
 router.post('/start', startLeadSession);
 router.get('/list', listSessions);
 router.get('/:id', getSession);

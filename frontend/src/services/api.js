@@ -61,6 +61,7 @@ export const dncApi = {
 };
 
 export const sessionApi = {
+  pingBla: () => api.get('/sessions/bla-ping'),
   preview: (formData, onProgress) =>
     api.post('/sessions/preview', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

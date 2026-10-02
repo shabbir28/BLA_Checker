@@ -151,6 +151,7 @@ export function MasterDncManager() {
 
       setUploadPhase('completed');
       setUploadResult(res.data.stats);
+      setPage(1);
       await fetchStats();
       await fetchRecords(1, sourceFilter, search);
     } catch (err) {
@@ -172,6 +173,7 @@ export function MasterDncManager() {
       setSinglePhone('');
       setSingleCampaign('');
       setSingleNotes('');
+      setPage(1);
       await fetchStats();
       await fetchRecords(1, sourceFilter, search);
     } catch (err) {

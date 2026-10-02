@@ -4,7 +4,29 @@ import { v4 as uuidv4 } from 'uuid';
 import xlsx from 'xlsx';
 import { pool, query } from '../config/db.js';
 import scrubbingEngine from '../services/scrubbingEngine.js';
+import blaService from '../services/blaService.js';
 import { UPLOADS_DIR } from '../config/uploads.js';
+import { pageWindow } from '../utils/pagination.js';
+
+export async function pingBla(req, res) {
+  try {
+    const result = await blaService.testConnection();
+    const active = String(result.blaStatus || '').toLowerCase() === 'success';
+    return res.json({
+      active,
+      status: result.blaStatus,
+      latencyMs: result.latencyMs ?? null,
+      message: active ? 'BLA active' : (result.message || 'BLA inactive. Checking stopped.'),
+    });
+  } catch (error) {
+    console.error('[SESSION] BLA ping error:', error);
+    return res.json({
+      active: false,
+      latencyMs: null,
+      message: 'BLA is not responding.',
+    });
+  }
+}
 
 export async function previewLeadFile(req, res) {
   if (!req.file) {
@@ -54,6 +76,13 @@ export async function startLeadSession(req, res) {
   }
 
   const sessionId = uuidv4();
+  const claimedPath = path.resolve(UPLOADS_DIR, `${safeFileId}.run`);
+  try {
+    fs.renameSync(filePath, claimedPath);
+  } catch {
+    return res.status(409).json({ message: 'This file is already being checked.' });
+  }
+
   const name = sessionName?.trim() || `Scrub_${path.basename(originalFilename || tempFileId, path.extname(tempFileId))}`;
 
   try {
@@ -75,7 +104,7 @@ export async function startLeadSession(req, res) {
 
     // Launch background asynchronous scrubbing process
     setImmediate(() => {
-      scrubbingEngine.processSession(sessionId, filePath, phoneColumn, req.user);
+      scrubbingEngine.processSession(sessionId, claimedPath, phoneColumn, req.user);
     });
 
     return res.status(201).json({
@@ -83,6 +112,11 @@ export async function startLeadSession(req, res) {
       session,
     });
   } catch (error) {
+    try {
+      if (fs.existsSync(claimedPath) && !fs.existsSync(filePath)) fs.renameSync(claimedPath, filePath);
+    } catch {
+      /* leave the claimed file for a later cleanup */
+    }
     console.error('[SESSION] Start error:', error);
     return res.status(500).json({ message: 'Failed to start lead checking session: ' + error.message });
   }
@@ -90,10 +124,10 @@ export async function startLeadSession(req, res) {
 
 export async function listSessions(req, res) {
   try {
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = Math.min(parseInt(req.query.limit || '20', 10), 100);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = pageWindow(req.query, 20, 100);
     const { startDate, endDate } = req.query;
+    const status = String(req.query.status || '').trim().toUpperCase();
+    const search = String(req.query.search || '').trim();
 
     const isAdmin = req.user.role === 'admin';
     const scopeAll = isAdmin && req.query.scope === 'all';
@@ -112,16 +146,28 @@ export async function listSessions(req, res) {
     }
 
     if (endDate) {
-      params.push(endDate);
-      whereClauses.push(`s.created_at <= $${params.length}`);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        params.push(endDate);
+        whereClauses.push(`s.created_at < ($${params.length}::date + interval '1 day')`);
+      } else {
+        params.push(endDate);
+        whereClauses.push(`s.created_at <= $${params.length}::timestamptz`);
+      }
+    }
+
+    if (['QUEUED', 'PROCESSING', 'COMPLETED', 'FAILED'].includes(status)) {
+      params.push(status);
+      whereClauses.push(`s.status = $${params.length}`);
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      whereClauses.push(`(s.session_name ILIKE $${params.length} OR s.original_filename ILIKE $${params.length} OR s.id::text ILIKE $${params.length})`);
     }
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
-    const countWhereSql = whereClauses.length > 0
-      ? `WHERE ${whereClauses.map((w) => w.replace(/^s\./, '')).join(' AND ')}`
-      : '';
 
-    const countRes = await query(`SELECT COUNT(*) as total FROM checking_sessions ${countWhereSql}`, params);
+    const countRes = await query(`SELECT COUNT(*) as total FROM checking_sessions s ${whereSql}`, params);
     const total = parseInt(countRes.rows[0].total, 10);
 
     const dataParams = [...params, limit, offset];
@@ -182,9 +228,7 @@ export async function getSession(req, res) {
 export async function getSessionRecords(req, res) {
   try {
     const { id } = req.params;
-    const page = parseInt(req.query.page || '1', 10);
-    const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-    const offset = (page - 1) * limit;
+    const { page, limit, offset } = pageWindow(req.query, 50, 200);
     const status = req.query.status?.trim();
     const search = req.query.search?.trim();
 
@@ -450,57 +494,64 @@ export async function exportSessionFull(req, res) {
       });
     }
 
-    const recordsRes = await query(
-      `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at
-       FROM session_records
-       WHERE session_id = $1
-       ORDER BY id ASC`,
-      [id]
-    );
+    const safeSessionName = session.session_name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const totalRows = parseInt(session.total_rows, 10) || 0;
 
-    const rows = recordsRes.rows;
-    if (rows.length === 0) {
+    if (format === 'xlsx' && totalRows > 200000) {
       return res.status(400).json({
-        message: 'No records found for this session.',
+        message: 'This report is too large for Excel. Download the full report as CSV.',
       });
     }
 
-    const exportData = rows.map((r) => {
+    if (String(req.query.check || '') === '1') {
+      return res.json({ ok: true, filename: `${safeSessionName}_AUDIT_REPORT.${format === 'xlsx' ? 'xlsx' : 'csv'}` });
+    }
+
+    const mapAuditRow = (r) => {
       const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
       return {
-        'Raw_Phone': r.raw_phone,
-        'Normalized_Phone': r.normalized_phone,
-        'Scrub_Status': r.status,
-        'Reason': r.reason,
+        Raw_Phone: r.raw_phone,
+        Normalized_Phone: r.normalized_phone,
+        Scrub_Status: r.status,
+        Reason: r.reason,
         ...orig,
-        'Checked_At': new Date(r.created_at).toISOString(),
+        Checked_At: new Date(r.created_at).toISOString(),
       };
-    });
-
-    const safeSessionName = session.session_name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    };
 
     if (format === 'xlsx') {
+      const recordsRes = await query(
+        `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at
+         FROM session_records
+         WHERE session_id = $1
+         ORDER BY id ASC`,
+        [id]
+      );
+      const exportData = recordsRes.rows.map(mapAuditRow);
+      if (exportData.length === 0) {
+        return res.status(400).json({ message: 'No records found for this session.' });
+      }
       const worksheet = xlsx.utils.json_to_sheet(exportData);
       const workbook = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(workbook, worksheet, 'Full Audit Report');
       const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
+      markDownload(res);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_AUDIT_REPORT.xlsx"`);
       return res.send(buffer);
     }
 
-    // CSV
-    let csv = '';
-    const headers = Object.keys(exportData[0]);
-    csv += headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(',') + '\n';
-    for (const row of exportData) {
-      csv += headers.map((h) => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
-    }
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_AUDIT_REPORT.csv"`);
-    return res.send(csv);
+    return streamCsv(res, {
+      filename: `${safeSessionName}_AUDIT_REPORT.csv`,
+      sql: `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at
+            FROM session_records
+            WHERE session_id = $1
+            ORDER BY id ASC`,
+      params: [id],
+      mapRow: mapAuditRow,
+      emptyMessage: 'No records found for this session.',
+    });
   } catch (error) {
     console.error('[SESSION] Full export error:', error);
     return res.status(500).json({ message: 'Failed to export full audit report: ' + error.message });
@@ -510,11 +561,15 @@ export async function exportSessionFull(req, res) {
 export async function deleteSession(req, res) {
   try {
     const { id } = req.params;
-    const sessionRes = await query('SELECT user_id, session_name FROM checking_sessions WHERE id = $1', [id]);
+    const sessionRes = await query('SELECT user_id, session_name, status FROM checking_sessions WHERE id = $1', [id]);
     if (sessionRes.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
 
     if (req.user.role !== 'admin' && sessionRes.rows[0].user_id !== req.user.id) {
       return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    if (sessionRes.rows[0].status === 'QUEUED' || sessionRes.rows[0].status === 'PROCESSING') {
+      return res.status(409).json({ message: 'This file is still being checked. Wait until it finishes before deleting it.' });
     }
 
     await query('DELETE FROM checking_sessions WHERE id = $1', [id]);
