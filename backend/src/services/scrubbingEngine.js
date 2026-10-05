@@ -4,7 +4,7 @@ import xlsx from 'xlsx';
 import csvParser from 'csv-parser';
 import { query, pool } from '../config/db.js';
 import { normalizePhone, detectPhoneColumn } from '../utils/phoneNormalizer.js';
-import { copyIntoTable } from '../utils/bulkCopy.js';
+import { copyIntoTable, pgJson, pgText } from '../utils/bulkCopy.js';
 import blaService from './blaService.js';
 
 class ScrubbingEngine {
@@ -71,9 +71,9 @@ class ScrubbingEngine {
       if (sessionRes.rows.length === 0) throw new Error('Session not found');
       const session = sessionRes.rows[0];
 
-      // 2. Parse File - multer preserved the real extension on disk, so trust that over the
-      // client-supplied display name.
-      const ext = (path.extname(filePath) || path.extname(session.original_filename)).toLowerCase();
+      // Checking renames the upload to "*.run", so "lead.xlsx.run" must stay an Excel file.
+      const ext = resolveUploadExt(filePath, session.original_filename);
+      console.log(`[ENGINE] Parsing ${session.original_filename} as ${ext || 'unknown'}`);
       let rawRows = [];
 
       if (ext === '.xlsx' || ext === '.xls') {
@@ -84,8 +84,7 @@ class ScrubbingEngine {
         const content = fs.readFileSync(filePath, 'utf-8');
         const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
         rawRows = lines.map((l) => ({ phone: l.trim() }));
-      } else {
-        // CSV Parsing
+      } else if (ext === '.csv') {
         rawRows = await new Promise((resolve, reject) => {
           const items = [];
           fs.createReadStream(filePath)
@@ -94,6 +93,8 @@ class ScrubbingEngine {
             .on('end', () => resolve(items))
             .on('error', reject);
         });
+      } else {
+        throw new Error(`This file type cannot be checked (${ext || 'unknown'}). Upload a CSV, Excel, or TXT file.`);
       }
 
       const totalRows = rawRows.length;
@@ -324,12 +325,12 @@ class ScrubbingEngine {
           allRecords,
           (r) => [
             sessionId,
-            r.raw_phone ?? '',
-            r.normalized_phone || null,
-            JSON.stringify(r.original_row_data || {}),
+            pgText(r.raw_phone),
+            r.normalized_phone ? pgText(r.normalized_phone) : null,
+            pgJson(r.original_row_data || {}),
             r.status,
-            r.reason || null,
-            r.bla_response_raw ? JSON.stringify(r.bla_response_raw) : null,
+            r.reason ? pgText(r.reason) : null,
+            r.bla_response_raw ? pgJson(r.bla_response_raw) : null,
           ]
         );
         await recordClient.query(
@@ -399,7 +400,7 @@ class ScrubbingEngine {
           `UPDATE checking_sessions
            SET status = 'FAILED', stage = 'FAILED', bla_verified = FALSE, error_message = $1, completed_at = NOW()
            WHERE id = $2`,
-          [error.message || 'Scrubbing failed', sessionId]
+          [[error.message, error.detail].filter(Boolean).join(' — ') || 'Scrubbing failed', sessionId]
         );
       } catch (dbErr) {
         console.error(`[ENGINE] Could not mark session ${sessionId} as FAILED:`, dbErr.message);
@@ -413,6 +414,17 @@ class ScrubbingEngine {
       }
     }
   }
+}
+
+const KNOWN_UPLOAD_EXT = new Set(['.xlsx', '.xls', '.csv', '.txt']);
+
+function resolveUploadExt(filePath, originalFilename) {
+  const diskName = path.basename(filePath).replace(/\.run$/i, '');
+  const diskExt = path.extname(diskName).toLowerCase();
+  if (KNOWN_UPLOAD_EXT.has(diskExt)) return diskExt;
+  const nameExt = path.extname(originalFilename || '').toLowerCase();
+  if (KNOWN_UPLOAD_EXT.has(nameExt)) return nameExt;
+  return diskExt;
 }
 
 export const scrubbingEngine = new ScrubbingEngine();

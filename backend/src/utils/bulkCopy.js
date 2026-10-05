@@ -10,9 +10,40 @@ const copyFrom = pgCopyStreams.from;
  * - everything else -> quoted, with embedded quotes doubled
  * jsonb columns work because the quoted text is valid JSON once quotes are un-doubled.
  */
+/** PostgreSQL JSON rejects null bytes and half of a surrogate pair. */
+export function pgText(value) {
+  if (value == null) return '';
+  return String(value)
+    .replace(/\u0000/g, '')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '')
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '');
+}
+
+function pgJsonValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') return pgText(value);
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'boolean') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(pgJsonValue);
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (child === undefined || typeof child === 'function') continue;
+      out[pgText(key)] = pgJsonValue(child);
+    }
+    return out;
+  }
+  return pgText(value);
+}
+
+export function pgJson(value) {
+  return JSON.stringify(pgJsonValue(value ?? null));
+}
+
 function csvCell(value) {
   if (value === null || value === undefined) return '';
-  return `"${String(value).replace(/"/g, '""')}"`;
+  return `"${pgText(value).replace(/"/g, '""')}"`;
 }
 
 /**
