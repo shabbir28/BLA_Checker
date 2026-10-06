@@ -88,7 +88,8 @@ export async function runMigrations() {
       );
 
       CREATE INDEX IF NOT EXISTS idx_session_records_session_status ON session_records(session_id, status);
-      CREATE INDEX IF NOT EXISTS idx_session_records_phone ON session_records(normalized_phone);
+      -- A global phone index is not used by session lookups and slows every large save.
+      DROP INDEX IF EXISTS idx_session_records_phone;
 
       -- Phone cells in lead files are often longer than a plain 10-digit number.
       ALTER TABLE session_records ALTER COLUMN raw_phone TYPE TEXT;

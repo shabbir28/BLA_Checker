@@ -227,45 +227,52 @@ class ScrubbingEngine {
       let blaDncCount = 0;
       let cleanCount = 0;
       const newDncToSync = [];
-      const apiConfig = await blaService.getConfig();
-      const blaBatchSize = Math.max(10, Math.min(apiConfig.batch_size || 100, 500));
+      const blaBatchSize = 500;
+      const blaConcurrency = 3;
+      const batches = [];
+      for (let i = 0; i < freshNumbers.length; i += blaBatchSize) {
+        batches.push(freshNumbers.slice(i, i + blaBatchSize));
+      }
 
       const totalFresh = freshNumbers.length;
       let processedFresh = 0;
 
-      for (let i = 0; i < freshNumbers.length; i += blaBatchSize) {
-        const batch = freshNumbers.slice(i, i + blaBatchSize);
-        const batchResults = await blaService.verifyBatch(batch);
+      for (let wave = 0; wave < batches.length; wave += blaConcurrency) {
+        const group = batches.slice(wave, wave + blaConcurrency);
+        const groupResults = await Promise.all(group.map((batch) => blaService.verifyBatch(batch)));
 
-        for (const phone of batch) {
-          const res = batchResults.get(phone);
-          if (!res) {
-            throw new Error(`BLA verification incomplete: Blacklist Alliance API did not return a response for phone number ${phone}.`);
-          }
-
-          const indices = validPhoneMap.get(phone);
-          if (res.isDnc) {
-            blaDncCount += indices.length;
-            newDncToSync.push({
-              phone,
-              reason: res.reason,
-            });
-            for (const idx of indices) {
-              allRecords[idx].status = 'BLA_DNC';
-              allRecords[idx].reason = res.reason;
-              allRecords[idx].bla_response_raw = res.raw;
+        group.forEach((batch, groupIndex) => {
+          const batchResults = groupResults[groupIndex];
+          for (const phone of batch) {
+            const res = batchResults.get(phone);
+            if (!res) {
+              throw new Error(`BLA verification incomplete: Blacklist Alliance API did not return a response for phone number ${phone}.`);
             }
-          } else {
-            cleanCount += indices.length;
-            for (const idx of indices) {
-              allRecords[idx].status = 'CLEAN';
-              allRecords[idx].reason = res.reason;
-              allRecords[idx].bla_response_raw = res.raw;
+
+            const indices = validPhoneMap.get(phone);
+            if (res.isDnc) {
+              blaDncCount += indices.length;
+              newDncToSync.push({
+                phone,
+                reason: res.reason,
+              });
+              for (const idx of indices) {
+                allRecords[idx].status = 'BLA_DNC';
+                allRecords[idx].reason = res.reason;
+                allRecords[idx].bla_response_raw = res.raw;
+              }
+            } else {
+              cleanCount += indices.length;
+              for (const idx of indices) {
+                allRecords[idx].status = 'CLEAN';
+                allRecords[idx].reason = res.reason;
+                allRecords[idx].bla_response_raw = res.raw;
+              }
             }
           }
-        }
+          processedFresh += batch.length;
+        });
 
-        processedFresh += batch.length;
         const freshPercent = totalFresh > 0 ? (processedFresh / totalFresh) * 35 : 35;
         const currentProgress = Math.min(85, Math.round(50 + freshPercent));
 
@@ -317,6 +324,7 @@ class ScrubbingEngine {
       const recordClient = await pool.connect();
       try {
         await recordClient.query('BEGIN');
+        await recordClient.query('SET LOCAL synchronous_commit = off');
         await copyIntoTable(
           recordClient,
           `COPY session_records
