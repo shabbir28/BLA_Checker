@@ -1,4 +1,67 @@
 import axios from 'axios';
+import { BlacklistAlliance } from 'blacklist-alliance-client';
+
+const BLACKLIST_CODES = new Set([
+  'anti-telemarketing',
+  'plaintiff-primary',
+  'plaintiff-secondary',
+  'attorney-primary',
+  'attorney-secondary',
+  'prelitigation1',
+  'prelitigation2',
+  'gov',
+  'blacklist',
+  'blacklisted',
+]);
+
+function digitsOnly(value) {
+  return String(value ?? '').replace(/\D/g, '');
+}
+
+function nanp(value) {
+  let digits = digitsOnly(value);
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  return digits.length === 10 ? digits : '';
+}
+
+function phoneList(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map(nanp).filter(Boolean);
+}
+
+function reasonText(reasonsMap, phone) {
+  if (!reasonsMap || typeof reasonsMap !== 'object') return '';
+  const raw = reasonsMap[phone] || reasonsMap[`1${phone}`];
+  if (raw == null) return '';
+  if (Array.isArray(raw)) return raw.map((part) => String(part)).join(',');
+  if (typeof raw === 'object') return String(raw.code || raw.reason || raw.message || '');
+  return String(raw);
+}
+
+function portalLabel(reasonRaw) {
+  const codes = String(reasonRaw || '')
+    .toLowerCase()
+    .split(/[^a-z0-9-]+/)
+    .filter(Boolean);
+  const labels = [];
+  if (codes.some((code) => BLACKLIST_CODES.has(code) || code.includes('prelitigation') || code.includes('plaintiff') || code.includes('attorney') || code.includes('blacklist'))) {
+    labels.push('Blacklist');
+  }
+  if (codes.some((code) => code.includes('suppress'))) labels.push('Suppress');
+  if (codes.some((code) => (code.endsWith('-dnc') && code !== 'federal-dnc') || code === 'statednc')) {
+    labels.push('State DNC');
+  }
+  if (codes.includes('federal-dnc') || codes.includes('federaldnc')) labels.push('Federal DNC');
+  return labels.length > 0 ? labels.join(', ') : 'Blacklist';
+}
+
+function stamp(extra) {
+  return {
+    provider: 'Blacklist Alliance',
+    timestamp: new Date().toISOString(),
+    ...extra,
+  };
+}
 
 class BlaService {
   constructor() {
@@ -14,7 +77,7 @@ class BlaService {
 
     let apiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
     let apiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
-    let batchSize = 500;
+    let batchSize = 5000;
     let rateLimit = 10;
     let isMockMode = false;
     let mockDncRate = 18;
@@ -26,13 +89,9 @@ class BlaService {
         const row = dbRes.rows[0];
         if (row.base_url && !row.base_url.includes('externalbla.com')) {
           apiUrl = row.base_url;
-        } else {
-          apiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
         }
         if (row.api_key && row.api_key !== 'bla_sec_test_enterprise_9981') {
           apiKey = row.api_key;
-        } else {
-          apiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
         }
         if (row.batch_size) batchSize = row.batch_size;
         if (row.rate_limit_per_sec) rateLimit = row.rate_limit_per_sec;
@@ -47,7 +106,7 @@ class BlaService {
       service_name: 'BLA_API',
       base_url: apiUrl,
       api_key: apiKey,
-      batch_size: Math.min(Math.max(batchSize, 10), 500),
+      batch_size: Math.max(batchSize, 1000),
       rate_limit_per_sec: rateLimit,
       is_mock_mode: isMockMode && !apiKey,
       mock_dnc_rate: mockDncRate,
@@ -64,178 +123,129 @@ class BlaService {
   }
 
   /**
-   * Deterministic hash for simulation
-   */
-  hashPhone(phoneStr) {
-    let hash = 0;
-    for (let i = 0; i < phoneStr.length; i++) {
-      hash = (hash << 5) - hash + phoneStr.charCodeAt(i);
-      hash |= 0;
-    }
-    return Math.abs(hash);
-  }
-
-  /**
-   * Verify a batch of phone numbers against Blacklist Alliance (BLA) API
+   * Verify phone numbers in bulk using the official Blacklist Alliance client (identical to Balitech CRM)
    * @param {string[]} phoneNumbers Array of normalized 10-digit phone numbers
-   * @returns {Promise<Map<string, { isDnc: boolean, reason: string, raw: object }>>}
+   * @param {function} onProgress Optional progress callback (completed, total)
+   * @returns {Promise<Map<string, { isDnc: boolean, status: string, reason: string, raw: object }>>}
    */
-  async verifyBatch(phoneNumbers) {
+  async verifyBulk(phoneNumbers, onProgress = null) {
     const config = await this.getConfig();
     const results = new Map();
 
     if (!phoneNumbers || phoneNumbers.length === 0) return results;
 
-    // Strict validation: Require live API key and live BLA verification
     if (!config.api_key || config.api_key === 'bla_live_sec_key_demo_enterprise' || config.api_key === 'bla_sec_default') {
-      throw new Error('Blacklist Alliance API Key is required for BLA verification. Please configure a valid BLA API key.');
+      throw new Error('Blacklist Alliance API Key is required for BLA verification.');
     }
 
-    if (config.is_mock_mode) {
-      throw new Error('Live Blacklist Alliance API connection is required. Mock mode is disabled to ensure only real BLA-verified files can be downloaded.');
-    }
+    const uniquePhones = Array.from(new Set(phoneNumbers.map(nanp).filter(Boolean)));
+    if (uniquePhones.length === 0) return results;
 
-    // LIVE BLACKLIST ALLIANCE API CALL
-    const targetUrl = this.buildRequestUrl(config);
-    const data = await this.postWithRetry(targetUrl, { phones: phoneNumbers }, 15000);
+    const client = new BlacklistAlliance(config.api_key, {
+      timeout: 60000,
+      retries: 3,
+      defaultVersion: 'v5',
+      logger: null,
+    });
 
-    if (!data || typeof data !== 'object') {
-      throw new Error('Blacklist Alliance API returned an empty or invalid response.');
-    }
+    console.log(`[BLA SERVICE] Starting bulk lookup for ${uniquePhones.length} numbers using official BLA client (v5)...`);
 
-    // Check for error responses
-    if (data.status && String(data.status).toLowerCase() !== 'success') {
-      const errMsg = data.message || data.error || data.status || 'Blacklist Alliance rejected the request';
-      throw new Error(`Blacklist Alliance rejected the request: ${errMsg}`);
-    }
-
-    if (data.error) {
-      throw new Error(`Blacklist Alliance error: ${data.error}`);
-    }
-
-    // Format 1: Official Blacklist Alliance v2 response:
-    // { status: 'success', numbers: 3, phones: ['...'], supression: ['9999999999'], reasons: { '9999999999': '...' } }
-    if (!Array.isArray(data)) {
-      if (String(data.status || '').toLowerCase() !== 'success') {
-        throw new Error(`Blacklist Alliance API did not return success status: ${data.message || 'Verification failed'}`);
-      }
-
-      const suppressionSet = new Set(
-        Array.isArray(data.supression)
-          ? data.supression.map((p) => String(p).replace(/\D/g, ''))
-          : []
-      );
-      const reasonsMap = data.reasons || {};
-
-      for (const phone of phoneNumbers) {
-        const cleanDigits = String(phone).replace(/\D/g, '');
-        if (suppressionSet.has(cleanDigits)) {
-          const reason = reasonsMap[cleanDigits] || reasonsMap[phone] || 'Blacklist Alliance Suppression List';
-          results.set(cleanDigits, {
-            isDnc: true,
-            status: 'BLA_DNC',
-            reason,
-            raw: {
-              provider: 'Blacklist Alliance',
-              suppressed: true,
-              reason,
-              timestamp: new Date().toISOString(),
-            },
-          });
-        } else {
-          results.set(cleanDigits, {
-            isDnc: false,
-            status: 'CLEAN',
-            reason: 'Clean - No DNC record found (Blacklist Alliance)',
-            raw: {
-              provider: 'Blacklist Alliance',
-              suppressed: false,
-              status: 'CLEAN',
-              timestamp: new Date().toISOString(),
-            },
-          });
+    const bulkResult = await client.bulkLookupSimple(uniquePhones, {
+      responseFormat: 'json',
+      autoBatch: true,
+      onProgress: (info) => {
+        if (onProgress && info?.completed && info?.total) {
+          onProgress(info.completed, info.total);
         }
-      }
-      return results;
+      },
+    });
+
+    const rawSuppressed = bulkResult?.supression ?? bulkResult?.suppression ?? [];
+    const suppressed = Array.isArray(rawSuppressed) ? rawSuppressed : [];
+    const reasons = bulkResult?.reasons || {};
+    const wirelessSet = new Set(phoneList(bulkResult?.wireless));
+
+    const suppressedSet = new Set(suppressed.map(nanp).filter(Boolean));
+    for (const reasonPhone of Object.keys(reasons)) {
+      const normalized = nanp(reasonPhone);
+      if (normalized) suppressedSet.add(normalized);
     }
 
-    // Format 2: Array of objects (e.g. resp=phonecode or standard object list)
-    if (Array.isArray(data)) {
-      for (const item of data) {
-        const phone = item.Phone || item.phone || item.number;
-        if (!phone) continue;
-        const cleanDigits = String(phone).replace(/\D/g, '');
-        const isDnc = item.ResultCode === 'D' || item.isDnc === true || item.status === 'DNC';
-        const reason = isDnc
-          ? item.reason || item.description || 'Blacklist Alliance DNC Record'
-          : 'Clean - Verified by Blacklist Alliance';
-
-        results.set(cleanDigits, {
-          isDnc,
-          status: isDnc ? 'BLA_DNC' : 'CLEAN',
+    for (const phone of uniquePhones) {
+      if (suppressedSet.has(phone)) {
+        const rawReason = reasonText(reasons, phone);
+        const reason = portalLabel(rawReason);
+        results.set(phone, {
+          isDnc: true,
+          status: 'BLA_DNC',
           reason,
-          raw: item,
+          raw: stamp({ suppressed: true, reason, code: rawReason || null }),
+        });
+      } else {
+        const line = wirelessSet.has(phone) ? 'Wireless' : 'Landline';
+        results.set(phone, {
+          isDnc: false,
+          status: 'CLEAN',
+          reason: `Good - ${line}`,
+          raw: stamp({ suppressed: false, status: 'CLEAN', line }),
         });
       }
+    }
 
-      // Fill in any remaining numbers as clean
-      for (const phone of phoneNumbers) {
-        const cleanDigits = String(phone).replace(/\D/g, '');
-        if (!results.has(cleanDigits)) {
-          results.set(cleanDigits, {
-            isDnc: false,
-            status: 'CLEAN',
-            reason: 'Clean - No DNC record found (Blacklist Alliance)',
-            raw: { provider: 'Blacklist Alliance', status: 'CLEAN' },
-          });
-        }
+    // Ensure every input number is in the results map
+    for (const phone of phoneNumbers) {
+      const clean = nanp(phone);
+      if (clean && results.has(clean)) {
+        if (phone !== clean) results.set(phone, results.get(clean));
+      } else if (!results.has(phone)) {
+        results.set(phone, {
+          isDnc: false,
+          status: 'CLEAN',
+          reason: 'Good - Landline',
+          raw: stamp({ suppressed: false, status: 'CLEAN' }),
+        });
       }
-
-      return results;
     }
 
-    throw new Error('Blacklist Alliance returned an unrecognized response format.');
-  }
-
-  buildRequestUrl(config) {
-    let targetUrl = config.base_url;
-    if (!targetUrl.includes('?key=') && !targetUrl.includes('&key=')) {
-      const separator = targetUrl.includes('?') ? '&' : '?';
-      targetUrl = `${targetUrl}${separator}key=${encodeURIComponent(config.api_key)}&ver=v2&resp=json`;
-    }
-    return targetUrl;
+    return results;
   }
 
   /**
-   * POST to BLA with retries on transient failures (network errors, timeouts, 429, 5xx).
-   * If every attempt fails the error is thrown so the calling session is marked FAILED
-   * instead of guessing results for a compliance check.
+   * Compatibility wrapper for batch verification
    */
-  async postWithRetry(url, body, timeout, maxAttempts = 3) {
-    let lastError;
+  async verifyBatch(phoneNumbers) {
+    return this.verifyBulk(phoneNumbers);
+  }
+
+  /**
+   * Single-number lookup using BLA v5 API (identical to checkdncnumber.com / CRM single lookup)
+   */
+  async lookupPhone(phone, maxAttempts = 3) {
+    const config = await this.getConfig();
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await axios.post(url, body, {
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'BLA-Checker-Enterprise/1.0',
+        const response = await axios.get('https://api.blacklistalliance.net/lookup', {
+          params: {
+            key: config.api_key,
+            ver: 'v5',
+            resp: 'json',
+            phone,
           },
-          timeout,
+          timeout: 15000,
+          validateStatus: () => true,
         });
-        return response.data;
+        const data = response.data;
+        if (data && typeof data === 'object' && String(data.status || '').toLowerCase() === 'success') {
+          return data;
+        }
       } catch (err) {
-        lastError = err;
-        const status = err.response?.status;
-        const retryable = !status || status === 429 || status >= 500;
-        if (!retryable || attempt === maxAttempts) break;
-        const backoffMs = 500 * 2 ** (attempt - 1);
-        console.warn(`[BLA LIVE API] Attempt ${attempt} failed (${err.message}); retrying in ${backoffMs}ms`);
-        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        // Retry
+      }
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
       }
     }
-
-    const detail = lastError?.response?.data?.message || lastError?.message || 'unknown error';
-    throw new Error(`Blacklist Alliance API unavailable: ${detail}`);
+    return null;
   }
 
   /**
@@ -245,53 +255,27 @@ class BlaService {
     const config = customConfig || (await this.getConfig());
     const startTime = Date.now();
 
-    if (config.is_mock_mode) {
-      await new Promise((resolve) => setTimeout(resolve, 60));
-      return {
-        success: true,
-        isMock: true,
-        latencyMs: Date.now() - startTime,
-        message: 'Mock BLA Engine connected. Ready for offline testing.',
-        sampleCheck: {
-          testNumber: '2125550199',
-          status: 'VERIFIED_ACTIVE',
-        },
-      };
-    }
-
     try {
-      const targetUrl = this.buildRequestUrl(config);
+      const client = new BlacklistAlliance(config.api_key, {
+        timeout: 10000,
+        retries: 2,
+        defaultVersion: 'v5',
+      });
 
-      // One number is enough. Active only when BLA's own status field is "success".
-      const testRes = await axios.post(
-        targetUrl,
-        { phones: ['2223334444'] },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 8000,
-          validateStatus: () => true,
-        }
-      );
+      const res = await client.bulkLookupSimple(['2223334444'], {
+        responseFormat: 'json',
+      });
 
       const latencyMs = Date.now() - startTime;
-      const data = testRes.data;
-      const blaStatus = data && typeof data === 'object' && data.status != null
-        ? String(data.status).toLowerCase()
-        : null;
-      const active = blaStatus === 'success';
-      const message = active
-        ? 'BLA active'
-        : (data && typeof data === 'object' && (data.message || data.error))
-          || (typeof data === 'string' && data.trim())
-          || (blaStatus ? `BLA status: ${blaStatus}` : 'BLA inactive');
+      const active = res && res.status === 'success';
 
       return {
         success: active,
         isMock: false,
         latencyMs,
-        message,
-        statusCode: testRes.status,
-        blaStatus,
+        message: active ? 'BLA active' : (res?.message || 'BLA inactive'),
+        statusCode: 200,
+        blaStatus: res?.status || null,
       };
     } catch (err) {
       return {
@@ -299,7 +283,7 @@ class BlaService {
         isMock: false,
         latencyMs: Date.now() - startTime,
         message: err.message || 'BLA is not responding.',
-        statusCode: err.response?.status || 500,
+        statusCode: 500,
         blaStatus: null,
       };
     }

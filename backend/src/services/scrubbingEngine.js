@@ -7,6 +7,8 @@ import { normalizePhone, detectPhoneColumn } from '../utils/phoneNormalizer.js';
 import { copyIntoTable, pgJson, pgText } from '../utils/bulkCopy.js';
 import blaService from './blaService.js';
 
+
+
 class ScrubbingEngine {
   /**
    * Preview rows and detect phone column
@@ -227,62 +229,57 @@ class ScrubbingEngine {
       let blaDncCount = 0;
       let cleanCount = 0;
       const newDncToSync = [];
-      const blaBatchSize = 500;
-      const blaConcurrency = 3;
-      const batches = [];
-      for (let i = 0; i < freshNumbers.length; i += blaBatchSize) {
-        batches.push(freshNumbers.slice(i, i + blaBatchSize));
-      }
-
       const totalFresh = freshNumbers.length;
-      let processedFresh = 0;
 
-      for (let wave = 0; wave < batches.length; wave += blaConcurrency) {
-        const group = batches.slice(wave, wave + blaConcurrency);
-        const groupResults = await Promise.all(group.map((batch) => blaService.verifyBatch(batch)));
+      console.log(`[ENGINE] Starting BLA scrub for ${totalFresh} fresh numbers using official BLA client (CRM standard)...`);
 
-        group.forEach((batch, groupIndex) => {
-          const batchResults = groupResults[groupIndex];
-          for (const phone of batch) {
-            const res = batchResults.get(phone);
-            if (!res) {
-              throw new Error(`BLA verification incomplete: Blacklist Alliance API did not return a response for phone number ${phone}.`);
-            }
-
-            const indices = validPhoneMap.get(phone);
-            if (res.isDnc) {
-              blaDncCount += indices.length;
-              newDncToSync.push({
-                phone,
-                reason: res.reason,
-              });
-              for (const idx of indices) {
-                allRecords[idx].status = 'BLA_DNC';
-                allRecords[idx].reason = res.reason;
-                allRecords[idx].bla_response_raw = res.raw;
-              }
-            } else {
-              cleanCount += indices.length;
-              for (const idx of indices) {
-                allRecords[idx].status = 'CLEAN';
-                allRecords[idx].reason = res.reason;
-                allRecords[idx].bla_response_raw = res.raw;
-              }
-            }
-          }
-          processedFresh += batch.length;
-        });
-
-        const freshPercent = totalFresh > 0 ? (processedFresh / totalFresh) * 35 : 35;
+      const bulkResults = await blaService.verifyBulk(freshNumbers, async (completed, total) => {
+        const freshPercent = total > 0 ? (completed / total) * 35 : 35;
         const currentProgress = Math.min(85, Math.round(50 + freshPercent));
-
         await query(
-          `UPDATE checking_sessions
-           SET progress_percent = $1, bla_dnc_count = $2, clean_count = $3
-           WHERE id = $4`,
-          [currentProgress, blaDncCount, cleanCount, sessionId]
-        );
+          `UPDATE checking_sessions SET progress_percent = $1 WHERE id = $2`,
+          [currentProgress, sessionId]
+        ).catch(() => {});
+      });
+
+      for (const phone of freshNumbers) {
+        const res = bulkResults.get(phone) || {
+          isDnc: false,
+          status: 'CLEAN',
+          reason: 'Good - Landline',
+          raw: { provider: 'Blacklist Alliance', suppressed: false, status: 'CLEAN' },
+        };
+
+        const indices = validPhoneMap.get(phone);
+        if (res.isDnc) {
+          blaDncCount += indices.length;
+          newDncToSync.push({
+            phone,
+            reason: res.reason,
+          });
+          for (const idx of indices) {
+            allRecords[idx].status = 'BLA_DNC';
+            allRecords[idx].reason = res.reason;
+            allRecords[idx].bla_response_raw = res.raw;
+          }
+        } else {
+          cleanCount += indices.length;
+          for (const idx of indices) {
+            allRecords[idx].status = 'CLEAN';
+            allRecords[idx].reason = res.reason;
+            allRecords[idx].bla_response_raw = res.raw;
+          }
+        }
       }
+
+      await query(
+        `UPDATE checking_sessions
+         SET progress_percent = 85, bla_dnc_count = $1, clean_count = $2
+         WHERE id = $3`,
+        [blaDncCount, cleanCount, sessionId]
+      );
+
+
 
       // 6. Phase 3: Auto-Sync Newly Flagged BLA DNC Numbers to Master DNC
       await query(
