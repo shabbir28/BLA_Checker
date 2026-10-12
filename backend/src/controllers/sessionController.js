@@ -288,6 +288,45 @@ function csvEscape(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
+function tenDigitPhone(value) {
+  let digits = String(value ?? '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  return digits.length === 10 ? digits : '';
+}
+
+function cleanExportRow(record) {
+  const orig = typeof record.original_row_data === 'string'
+    ? JSON.parse(record.original_row_data)
+    : (record.original_row_data || {});
+  const phone = tenDigitPhone(record.normalized_phone) || tenDigitPhone(record.raw_phone);
+  const rawDigits = String(record.raw_phone ?? '').replace(/\D/g, '');
+  const row = {};
+  for (const [key, value] of Object.entries(orig)) {
+    const valueDigits = String(value ?? '').replace(/\D/g, '');
+    const sameNumber = valueDigits && (valueDigits === rawDigits || valueDigits === phone || valueDigits === `1${phone}`);
+    row[key] = sameNumber && phone ? phone : value;
+  }
+  row.Clean_Phone = phone || tenDigitPhone(record.normalized_phone);
+  row.Scrub_Status = 'CLEAN';
+  return row;
+}
+
+function keepPhonesAsText(sheet) {
+  const range = xlsx.utils.decode_range(sheet['!ref'] || 'A1');
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    for (let col = range.s.c; col <= range.e.c; col += 1) {
+      const address = xlsx.utils.encode_cell({ r: row, c: col });
+      const cell = sheet[address];
+      if (!cell) continue;
+      const digits = String(cell.v ?? '').replace(/\D/g, '');
+      if (digits.length !== 10 && !(digits.length === 11 && digits.startsWith('1'))) continue;
+      cell.t = 's';
+      cell.v = digits.length === 11 ? digits.slice(1) : digits;
+      cell.z = '@';
+    }
+  }
+}
+
 function markDownload(res) {
   res.setHeader('Cache-Control', 'private, no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
@@ -419,14 +458,12 @@ export async function exportSessionClean(req, res) {
          ORDER BY id ASC`,
         [id]
       );
-      const exportData = recordsRes.rows.map((r) => {
-        const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
-        return { ...orig, Clean_Phone: r.normalized_phone, Scrub_Status: 'CLEAN' };
-      });
+      const exportData = recordsRes.rows.map(cleanExportRow);
       if (exportData.length === 0) {
         return res.status(400).json({ message: 'No clean records found for this session.' });
       }
       const worksheet = xlsx.utils.json_to_sheet(exportData);
+      keepPhonesAsText(worksheet);
       const workbook = xlsx.utils.book_new();
       xlsx.utils.book_append_sheet(workbook, worksheet, 'Clean Leads');
       const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
@@ -439,16 +476,13 @@ export async function exportSessionClean(req, res) {
 
     return streamCsv(res, {
       filename: `${safeSessionName}_CLEAN.csv`,
-      sql: `SELECT normalized_phone, original_row_data
+      sql: `SELECT raw_phone, normalized_phone, original_row_data
             FROM session_records
             WHERE session_id = $1 AND status = 'CLEAN'
             ORDER BY id ASC`,
       params: [id],
       emptyMessage: 'No clean records found for this session.',
-      mapRow: (r) => {
-        const orig = typeof r.original_row_data === 'string' ? JSON.parse(r.original_row_data) : r.original_row_data || {};
-        return { ...orig, Clean_Phone: r.normalized_phone, Scrub_Status: 'CLEAN' };
-      },
+      mapRow: cleanExportRow,
     });
   } catch (error) {
     console.error('[SESSION] Clean export error:', error);

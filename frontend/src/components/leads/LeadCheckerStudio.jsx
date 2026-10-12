@@ -730,7 +730,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
 
           <div className="card-raised mt-6 p-5 text-center">
             <h3 className="text-sm font-semibold text-white">Download your results</h3>
-            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns.</p>
+            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns. Phone numbers are 10 digits, with no leading 1.</p>
             
             {downloadError && (
               <div className="alert-error mt-4 text-left" role="alert">
