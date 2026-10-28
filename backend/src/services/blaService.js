@@ -76,7 +76,7 @@ class BlaService {
     }
 
     let apiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
-    let apiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
+    let apiKey = process.env.BLA_API_KEY || '';
     let batchSize = 5000;
     let rateLimit = 10;
     let isMockMode = false;

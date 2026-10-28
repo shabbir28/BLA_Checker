@@ -1,3 +1,5 @@
+import 'dotenv/config';
+if (!process.env.BLA_API_KEY) throw new Error('Set BLA_API_KEY before running this maintenance script.');
 import fs from 'fs';
 import csvParser from 'csv-parser';
 import { BlacklistAlliance } from 'blacklist-alliance-client';
@@ -13,7 +15,7 @@ fs.createReadStream(filePath)
     const phones = rows.map(r => String(r[phoneCol]).replace(/\D/g, '')).filter(p => p.length === 10);
     
     console.log(`Total valid phones: ${phones.length}`);
-    const client = new BlacklistAlliance('KePFGNcVHPpzjxU88nWD', { timeout: 60000, retries: 2, defaultVersion: 'v5' });
+    const client = new BlacklistAlliance(process.env.BLA_API_KEY, { timeout: 60000, retries: 2, defaultVersion: 'v5' });
     
     console.log('Calling client.bulkLookupSimple on all 7755 numbers...');
     const res = await client.bulkLookupSimple(phones, { responseFormat: 'json', autoBatch: true });

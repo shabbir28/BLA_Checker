@@ -35,7 +35,8 @@ export async function runSeeds() {
 
     // 3. Seed Default BLA API Configuration
     const liveApiUrl = process.env.BLA_API_URL || 'https://api.blacklistalliance.net/bulklookup';
-    const liveApiKey = process.env.BLA_API_KEY || 'KePFGNcVHPpzjxU88nWD';
+    const liveApiKey = process.env.BLA_API_KEY || '';
+    if (!liveApiKey) throw new Error('Set BLA_API_KEY in the backend environment before seeding.');
     await client.query(`
       INSERT INTO api_configurations (service_name, base_url, api_key, batch_size, rate_limit_per_sec, is_mock_mode, mock_dnc_rate, updated_by)
       VALUES ('BLA_API', $1, $2, 500, 10, false, 0, $3)

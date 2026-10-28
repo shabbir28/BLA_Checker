@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
+if (!process.env.BLA_API_KEY) throw new Error('Set BLA_API_KEY before running this maintenance script.');
+
 
 import pg from 'pg';
 const { Pool } = pg;
@@ -45,7 +47,7 @@ async function main() {
     await client.query(
       `INSERT INTO api_configurations (service_name, base_url, api_key, batch_size, is_mock_mode)
        VALUES ($1, $2, $3, $4, $5);`,
-      ['BLA_API', 'https://api.blacklistalliance.net/bulklookup', 'KePFGNcVHPpzjxU88nWD', 500, false]
+      ['BLA_API', 'https://api.blacklistalliance.net/bulklookup', process.env.BLA_API_KEY, 500, false]
     );
 
     const apiConfig = await client.query('SELECT service_name, base_url, api_key, is_mock_mode FROM api_configurations;');

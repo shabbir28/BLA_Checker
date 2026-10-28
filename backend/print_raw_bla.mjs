@@ -1,6 +1,8 @@
+import 'dotenv/config';
+if (!process.env.BLA_API_KEY) throw new Error('Set BLA_API_KEY before running this maintenance script.');
 import axios from 'axios';
 
-const key = 'KePFGNcVHPpzjxU88nWD';
+const key = process.env.BLA_API_KEY;
 const phones = ['2109355764', '2169739690', '2244349356', '2488783070'];
 
 console.log('--- RAW API CALL TO BLA /bulklookup (ver=v5) ---');
