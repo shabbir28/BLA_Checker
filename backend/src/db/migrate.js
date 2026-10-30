@@ -102,6 +102,8 @@ export async function runMigrations() {
           invalid_numbers = COALESCE((SELECT COUNT(*) FROM session_records r WHERE r.session_id = s.id AND r.status = 'INVALID'), 0);
 
       CREATE INDEX IF NOT EXISTS idx_session_records_session_status ON session_records(session_id, status);
+      CREATE INDEX IF NOT EXISTS idx_session_records_session_status_id ON session_records(session_id, status, id);
+      CREATE INDEX IF NOT EXISTS idx_session_records_session_id ON session_records(session_id, id);
       -- A global phone index is not used by session lookups and slows every large save.
       DROP INDEX IF EXISTS idx_session_records_phone;
 
