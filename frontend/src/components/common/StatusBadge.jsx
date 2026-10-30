@@ -5,6 +5,7 @@ const CONFIGS = {
   LOCAL_DNC: { cls: 'chip-amber', dot: 'bg-amber-400', text: 'Already in DNC' },
   BLA_DNC: { cls: 'chip-red', dot: 'bg-red-400', text: 'DNC from BLA' },
   INVALID: { cls: 'chip-zinc', dot: 'bg-zinc-500', text: 'Invalid' },
+  EMPTY: { cls: 'chip-zinc', dot: 'bg-zinc-500', text: 'Empty row' },
   DUPLICATE: { cls: 'chip-zinc', dot: 'bg-zinc-500', text: 'Duplicate' },
   PROCESSING: { cls: 'chip-blue', dot: 'bg-blue-400 animate-pulse', text: 'Processing' },
   QUEUED: { cls: 'chip-zinc', dot: 'bg-zinc-400', text: 'Queued' },

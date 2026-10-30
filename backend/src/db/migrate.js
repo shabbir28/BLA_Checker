@@ -49,6 +49,7 @@ export async function runMigrations() {
         total_rows INT DEFAULT 0,
         valid_numbers INT DEFAULT 0,
         invalid_numbers INT DEFAULT 0,
+        empty_numbers INT DEFAULT 0,
         duplicate_numbers INT DEFAULT 0,
         local_dnc_count INT DEFAULT 0,
         bla_dnc_count INT DEFAULT 0,
@@ -64,6 +65,7 @@ export async function runMigrations() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
 
+      ALTER TABLE checking_sessions ADD COLUMN IF NOT EXISTS empty_numbers INT DEFAULT 0;
       ALTER TABLE checking_sessions ADD COLUMN IF NOT EXISTS bla_verified BOOLEAN DEFAULT FALSE;
       UPDATE checking_sessions SET bla_verified = TRUE WHERE status = 'COMPLETED' AND (bla_verified IS NULL OR bla_verified = FALSE);
 
@@ -81,11 +83,23 @@ export async function runMigrations() {
         raw_phone VARCHAR(50),
         normalized_phone VARCHAR(30),
         original_row_data JSONB,
-        status VARCHAR(30) NOT NULL CHECK (status IN ('CLEAN', 'LOCAL_DNC', 'BLA_DNC', 'INVALID', 'DUPLICATE')),
+        status VARCHAR(30) NOT NULL CHECK (status IN ('CLEAN', 'LOCAL_DNC', 'BLA_DNC', 'INVALID', 'DUPLICATE', 'EMPTY')),
         reason TEXT,
         bla_response_raw JSONB,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
+
+      ALTER TABLE session_records DROP CONSTRAINT IF EXISTS session_records_status_check;
+      ALTER TABLE session_records ADD CONSTRAINT session_records_status_check CHECK (status IN ('CLEAN', 'LOCAL_DNC', 'BLA_DNC', 'INVALID', 'DUPLICATE', 'EMPTY'));
+
+      UPDATE session_records 
+      SET status = 'EMPTY' 
+      WHERE status = 'INVALID' 
+        AND (reason = 'Empty phone number' OR reason = 'Missing phone number' OR raw_phone IS NULL OR TRIM(raw_phone) = '');
+
+      UPDATE checking_sessions s
+      SET empty_numbers = COALESCE((SELECT COUNT(*) FROM session_records r WHERE r.session_id = s.id AND r.status = 'EMPTY'), 0),
+          invalid_numbers = COALESCE((SELECT COUNT(*) FROM session_records r WHERE r.session_id = s.id AND r.status = 'INVALID'), 0);
 
       CREATE INDEX IF NOT EXISTS idx_session_records_session_status ON session_records(session_id, status);
       -- A global phone index is not used by session lookups and slows every large save.

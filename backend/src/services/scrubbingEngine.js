@@ -121,6 +121,7 @@ class ScrubbingEngine {
 
       let validCount = 0;
       let invalidCount = 0;
+      let emptyCount = 0;
       let duplicateCount = 0;
 
       for (let i = 0; i < rawRows.length; i++) {
@@ -128,7 +129,18 @@ class ScrubbingEngine {
         const rawPhone = row[selectedColumn] ?? Object.values(row)[0] ?? '';
         const normResult = normalizePhone(rawPhone);
 
-        if (!normResult.isValid) {
+        if (normResult.isEmpty) {
+          emptyCount++;
+          allRecords.push({
+            session_id: sessionId,
+            raw_phone: String(rawPhone),
+            normalized_phone: null,
+            original_row_data: row,
+            status: 'EMPTY',
+            reason: normResult.reason || 'Empty phone number',
+            bla_response_raw: null,
+          });
+        } else if (!normResult.isValid) {
           invalidCount++;
           allRecords.push({
             session_id: sessionId,
@@ -176,9 +188,9 @@ class ScrubbingEngine {
       await query(
         `UPDATE checking_sessions
          SET stage = 'LOCAL_SCRUB', progress_percent = 30,
-             valid_numbers = $1, invalid_numbers = $2, duplicate_numbers = $3
-         WHERE id = $4`,
-        [validCount, invalidCount, duplicateCount, sessionId]
+             valid_numbers = $1, invalid_numbers = $2, duplicate_numbers = $3, empty_numbers = $4
+         WHERE id = $5`,
+        [validCount, invalidCount, duplicateCount, emptyCount, sessionId]
       );
 
       // 4. Phase 1: Local Internal Master DNC Scrub
@@ -352,8 +364,9 @@ class ScrubbingEngine {
                bla_dnc_count = $6,
                clean_count = $7,
                api_calls_saved = $8,
+               empty_numbers = $9,
                completed_at = NOW()
-           WHERE id = $9`,
+           WHERE id = $10`,
           [
             totalRows,
             validCount,
@@ -363,6 +376,7 @@ class ScrubbingEngine {
             blaDncCount,
             cleanCount,
             apiCallsSaved,
+            emptyCount,
             sessionId,
           ]
         );
@@ -388,6 +402,7 @@ class ScrubbingEngine {
               localDncCount,
               blaDncCount,
               invalidCount,
+              emptyCount,
               apiCallsSaved,
               durationMs: Date.now() - startTime,
             }),

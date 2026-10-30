@@ -6,18 +6,21 @@ export function normalizePhone(rawPhone) {
   if (rawPhone === null || rawPhone === undefined) {
     return {
       isValid: false,
+      isEmpty: true,
       raw: '',
       normalized: '',
       formatted: '',
-      reason: 'Missing phone number',
+      reason: 'Empty phone number',
     };
   }
 
   const rawStr = String(rawPhone).trim();
-  if (!rawStr) {
+  const lower = rawStr.toLowerCase();
+  if (!rawStr || lower === 'null' || lower === 'undefined' || lower === 'n/a' || lower === 'na' || lower === 'none' || rawStr === '-' || rawStr === '--') {
     return {
       isValid: false,
-      raw: '',
+      isEmpty: true,
+      raw: rawStr,
       normalized: '',
       formatted: '',
       reason: 'Empty phone number',

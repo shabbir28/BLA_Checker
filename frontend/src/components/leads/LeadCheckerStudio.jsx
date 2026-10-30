@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   ListChecks,
   Ban,
+  FileQuestion,
   Copy,
   ChevronLeft,
   ChevronRight,
@@ -87,6 +88,7 @@ function StepTracker({ current }) {
 const RESULT_CARDS = [
   { key: 'ALL', label: 'Total in file', field: 'total_rows', hint: 'All uploaded rows', icon: FileText, tone: 'zinc' },
   { key: 'INVALID', label: 'Invalid', field: 'invalid_numbers', hint: 'Not a valid phone', icon: Ban, tone: 'zinc' },
+  { key: 'EMPTY', label: 'Empty rows', field: 'empty_numbers', hint: 'Missing or blank', icon: FileQuestion, tone: 'zinc' },
   { key: 'DUPLICATE', label: 'Duplicates', field: 'duplicate_numbers', hint: 'Repeat in this file', icon: Copy, tone: 'zinc' },
   { key: 'LOCAL_DNC', label: 'Already in DNC', field: 'local_dnc_count', hint: 'Skipped BLA API', icon: Database, tone: 'amber' },
   { key: 'BLA_DNC', label: 'DNC from BLA', field: 'bla_dnc_count', hint: 'Saved to Master DNC', icon: Zap, tone: 'red' },
@@ -95,7 +97,7 @@ const RESULT_CARDS = [
 
 function ResultTiles({ session, cleanHint, selected, onSelect }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
       {RESULT_CARDS.map((card) => (
         <StatTile
           key={card.key}
@@ -724,8 +726,8 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
           )}
 
           <p className="mt-3 text-center text-[11px] text-zinc-500">
-            Total = Invalid + Duplicates + Already in DNC + DNC from BLA + Clean.
-            Invalid and duplicate rows are not sent to BLA.
+            Total = Invalid + Empty + Duplicates + Already in DNC + DNC from BLA + Clean.
+            Invalid, empty, and duplicate rows are not sent to BLA.
           </p>
 
           <div className="card-raised mt-6 p-5 text-center">

@@ -149,12 +149,14 @@ export function SessionDetails({ sessionId, onBack }) {
     { id: 'LOCAL_DNC', label: 'Already in DNC', count: session.local_dnc_count, tone: 'text-amber-300' },
     { id: 'BLA_DNC', label: 'DNC from BLA', count: session.bla_dnc_count, tone: 'text-red-300' },
     { id: 'INVALID', label: 'Invalid', count: session.invalid_numbers },
+    { id: 'EMPTY', label: 'Empty rows', count: session.empty_numbers },
     { id: 'DUPLICATE', label: 'Duplicates', count: session.duplicate_numbers },
   ];
 
   const summary = [
     { id: 'ALL', label: 'Total in file', value: session.total_rows, cls: 'text-white' },
     { id: 'INVALID', label: 'Invalid', value: session.invalid_numbers, cls: 'text-zinc-200' },
+    { id: 'EMPTY', label: 'Empty rows', value: session.empty_numbers, cls: 'text-zinc-200' },
     { id: 'DUPLICATE', label: 'Duplicates', value: session.duplicate_numbers, cls: 'text-zinc-200' },
     { id: 'LOCAL_DNC', label: 'Already in DNC', value: session.local_dnc_count, cls: 'text-amber-300' },
     { id: 'BLA_DNC', label: 'DNC from BLA', value: session.bla_dnc_count, cls: 'text-red-300' },
@@ -263,7 +265,7 @@ export function SessionDetails({ sessionId, onBack }) {
           </div>
         </div>
 
-        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
           {summary.map((s) => {
             const active = statusFilter === s.id;
             return (

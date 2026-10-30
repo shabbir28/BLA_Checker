@@ -165,6 +165,7 @@ export function AdminDashboard({ onSelectSession, onOpenNewScrub }) {
       { key: 'local', name: 'Already in DNC', value: kpis.totalLocalDnc || 0, color: COLORS.local },
       { key: 'bla', name: 'DNC from BLA', value: kpis.totalBlaDnc || 0, color: COLORS.bla },
       { key: 'invalid', name: 'Invalid', value: kpis.totalInvalid || 0, color: COLORS.invalid },
+      { key: 'empty', name: 'Empty rows', value: kpis.totalEmpty || 0, color: '#71717a' },
     ];
     const total = items.reduce((a, b) => a + b.value, 0);
     return { items, total, chart: items.filter((i) => i.value > 0) };
