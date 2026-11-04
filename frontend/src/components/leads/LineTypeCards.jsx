@@ -14,7 +14,7 @@ export default function LineTypeCards({ session, downloading, onDownload, compac
         const count = session[field] || 0;
         const busy = downloading === `${label}-csv`;
         return (
-          <div key={label} className={`w-[calc((100%-0.75rem)/2)] sm:w-[calc((100%-2.25rem)/4)] xl:w-[calc((100%-4.5rem)/7)] ${compact ? 'card-raised h-24 p-3.5 text-left text-emerald-300' : 'h-36 rounded-xl border border-emerald-900/50 bg-emerald-950/30 p-4 text-left text-emerald-300'}`}>
+          <div key={label} className={`w-[calc((100%-0.75rem)/2)] sm:w-[calc((100%-2.25rem)/4)] xl:w-[calc((100%-4.5rem)/7)] ${compact ? 'card-raised h-24 p-3.5 text-left text-emerald-300' : 'h-32 rounded-xl border border-emerald-900/50 bg-emerald-950/30 p-3 text-left text-emerald-300'}`}>
             <div className={`flex items-start justify-between gap-1 ${compact ? '' : 'min-h-8'}`}>
               <span className="text-[11px] font-medium opacity-80">{label}</span>
               <button

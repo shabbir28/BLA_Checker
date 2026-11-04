@@ -126,7 +126,7 @@ function StatTile({ label, value, hint, tone = 'zinc', icon: Icon, selected, onC
     red: 'border-red-900/50 bg-red-950/30 text-red-300',
     emerald: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
   };
-  const className = `flex h-36 w-full flex-col rounded-xl border p-4 text-left ${tones[tone]} ${
+  const className = `flex h-32 w-full flex-col rounded-xl border p-3 text-left ${tones[tone]} ${
     onClick ? 'cursor-pointer transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40' : ''
   } ${selected ? 'ring-2 ring-white/70' : ''}`;
   const body = (
@@ -640,13 +640,13 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
 
       {/* ---------------- STEP 4: RESULTS ---------------- */}
       {currentStep === 4 && activeSession && (
-        <section className="card p-6 sm:p-8">
-          <header className="mx-auto mb-8 max-w-lg text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-800/60 bg-emerald-950/50 text-emerald-400 shadow-glow">
-              <Sparkles className="h-7 w-7" />
+        <section className="card p-4 sm:p-5">
+          <header className="mx-auto mb-4 max-w-2xl text-center">
+            <div className="mx-auto mb-2 flex h-9 w-9 items-center justify-center rounded-2xl border border-emerald-800/60 bg-emerald-950/50 text-emerald-400 shadow-glow">
+              <Sparkles className="h-5 w-5" />
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white">Check complete</h2>
-            <p className="mt-2 text-sm text-zinc-400">
+            <h2 className="text-xl font-bold tracking-tight text-white">Check complete</h2>
+            <p className="mt-1 text-xs text-zinc-400">
               <span className="font-mono text-zinc-200">{activeSession.original_filename}</span> has been fully verified.
               Your clean list is ready to download.
             </p>
@@ -660,6 +660,42 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             downloading={downloading}
             onDownload={handleDownload}
           />
+
+          <div className="card-raised mx-auto mt-3 max-w-2xl px-4 py-3 text-center">
+            <h3 className="text-sm font-semibold text-white">Download your results</h3>
+            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns. Phone numbers are 10 digits, with no leading 1.</p>
+
+            {downloadError && (
+              <div className="alert-error mt-4 text-left" role="alert">
+                <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
+                <div>
+                  <p className="font-semibold text-xs text-red-300">Download blocked</p>
+                  <p className="mt-0.5 text-xs text-red-300/90">{downloadError}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+              <button
+                onClick={() => handleDownload('clean', 'csv')}
+                disabled={Boolean(downloading) || activeSession.clean_count === 0}
+                className="btn-success"
+                title={activeSession.clean_count === 0 ? 'No clean numbers to download' : 'Download clean numbers as CSV'}
+              >
+                {downloading === 'clean-csv' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Clean numbers (CSV)
+              </button>
+              <button
+                onClick={() => handleDownload('clean', 'xlsx')}
+                disabled={Boolean(downloading) || activeSession.clean_count === 0}
+                className="btn-secondary"
+                title={activeSession.clean_count === 0 ? 'No clean numbers to download' : 'Download clean numbers as Excel'}
+              >
+                {downloading === 'clean-xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 text-emerald-400" />}
+                Clean numbers (Excel)
+              </button>
+            </div>
+          </div>
 
           {cardView && (
             <div ref={cardListRef} className="card-raised mt-4 overflow-hidden">
@@ -737,43 +773,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             Invalid, empty, and duplicate rows are not sent to BLA.
           </p>
 
-          <div className="card-raised mt-6 p-5 text-center">
-            <h3 className="text-sm font-semibold text-white">Download your results</h3>
-            <p className="mt-0.5 text-xs text-zinc-500">Clean numbers keep all original columns. Phone numbers are 10 digits, with no leading 1.</p>
-            
-            {downloadError && (
-              <div className="alert-error mt-4 text-left" role="alert">
-                <AlertCircle className="mt-px h-4 w-4 shrink-0 text-red-400" />
-                <div>
-                  <p className="font-semibold text-xs text-red-300">Download blocked</p>
-                  <p className="mt-0.5 text-xs text-red-300/90">{downloadError}</p>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-              <button
-                onClick={() => handleDownload('clean', 'csv')}
-                disabled={Boolean(downloading) || activeSession.clean_count === 0}
-                className="btn-success"
-                title={activeSession.clean_count === 0 ? 'No clean numbers to download' : 'Download clean numbers as CSV'}
-              >
-                {downloading === 'clean-csv' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                Clean numbers (CSV)
-              </button>
-              <button
-                onClick={() => handleDownload('clean', 'xlsx')}
-                disabled={Boolean(downloading) || activeSession.clean_count === 0}
-                className="btn-secondary"
-                title={activeSession.clean_count === 0 ? 'No clean numbers to download' : 'Download clean numbers as Excel'}
-              >
-                {downloading === 'clean-xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 text-emerald-400" />}
-                Clean numbers (Excel)
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-col-reverse items-stretch justify-between gap-2 sm:flex-row sm:items-center">
+          <div className="mt-3 flex flex-col-reverse items-stretch justify-between gap-2 sm:flex-row sm:items-center">
             <button onClick={handleReset} className="btn-secondary">
               <RotateCcw className="h-4 w-4" /> Check another file
             </button>
