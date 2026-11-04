@@ -85,9 +85,9 @@ export const sessionApi = {
     const token = localStorage.getItem('bla_token') || '';
     return `/api/sessions/${id}/export/full?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
   },
-  downloadExport: async (id, type = 'clean', format = 'csv') => {
+  downloadExport: async (id, type = 'clean', format = 'csv', lineType) => {
     const token = localStorage.getItem('bla_token') || '';
-    const fileUrl = `/api/sessions/${id}/export/${type}?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+    const fileUrl = `/api/sessions/${id}/export/${type}?format=${format}${lineType ? `&lineType=${encodeURIComponent(lineType)}` : ''}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
     const check = await fetch(`${fileUrl}&check=1`, {
       cache: 'no-store',
       headers: token ? { Authorization: `Bearer ${token}` } : {},

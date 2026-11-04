@@ -1,3 +1,5 @@
+import CleanDownloadButton from './CleanDownloadButton';
+import LineTypeCards from './LineTypeCards';
 import React, { useEffect, useState, useCallback } from 'react';
 import { sessionApi } from '../../services/api';
 import StatusBadge from '../common/StatusBadge';
@@ -35,12 +37,12 @@ export function SessionDetails({ sessionId, onBack }) {
   const [downloading, setDownloading] = useState('');
   const [downloadError, setDownloadError] = useState(null);
 
-  const handleDownload = async (type, format) => {
-    const key = `${type}-${format}`;
+  const handleDownload = async (type, format, lineType) => {
+    const key = `${lineType || type}-${format}`;
     try {
       setDownloading(key);
       setDownloadError(null);
-      await sessionApi.downloadExport(sessionId, type, format);
+      await sessionApi.downloadExport(sessionId, type, format, lineType);
     } catch (err) {
       console.error('[SESSION DETAILS] Download error:', err);
       setDownloadError(err.message || 'Download blocked: BLA verification could not be confirmed.');
@@ -269,21 +271,24 @@ export function SessionDetails({ sessionId, onBack }) {
           {summary.map((s) => {
             const active = statusFilter === s.id;
             return (
+              <div key={s.id} className="relative">
               <button
-                key={s.id}
                 type="button"
                 onClick={() => handleFilterChange(s.id)}
                 aria-pressed={active}
-                className={`card-raised p-3.5 text-left transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40 ${
+                className={`card-raised h-24 w-full p-3.5 text-left transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40 ${
                   active ? 'ring-2 ring-white/70' : ''
                 }`}
               >
-                <span className="block text-[11px] text-zinc-500">{s.label}</span>
+                <span className="block pr-4 text-[11px] text-zinc-500">{s.label}</span>
                 <span className={`mt-1 block font-mono text-xl font-bold leading-none ${s.cls}`}>{formatNumber(s.value)}</span>
                 {s.hint && <span className="mt-1 block text-[11px] text-zinc-600">{s.hint}</span>}
               </button>
+              {s.id === 'CLEAN' && <CleanDownloadButton session={session} downloading={downloading} onDownload={handleDownload} />}
+              </div>
             );
           })}
+          <LineTypeCards session={session} downloading={downloading} onDownload={handleDownload} compact />
         </div>
       </section>
 

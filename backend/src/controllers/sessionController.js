@@ -7,6 +7,7 @@ import scrubbingEngine from '../services/scrubbingEngine.js';
 import blaService from '../services/blaService.js';
 import { UPLOADS_DIR } from '../config/uploads.js';
 import { pageWindow } from '../utils/pagination.js';
+import { LINE_TYPE_SQL } from '../utils/lineType.js';
 
 export async function pingBla(req, res) {
   try {
@@ -218,6 +219,13 @@ export async function getSession(req, res) {
       return res.status(403).json({ message: 'You do not have permission to view this session.' });
     }
 
+    const counts = await query(
+      `SELECT COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Wireless')::int AS wireless_count,
+              COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Landline')::int AS landline_count
+       FROM session_records WHERE session_id = $1 AND status = 'CLEAN'`,
+      [id]
+    );
+    Object.assign(session, counts.rows[0]);
     return res.json({ session });
   } catch (error) {
     console.error('[SESSION] Get error:', error);
@@ -308,6 +316,7 @@ function cleanExportRow(record) {
   }
   row.Clean_Phone = phone || tenDigitPhone(record.normalized_phone);
   row.Scrub_Status = 'CLEAN';
+  row.Line_Type = record.line_type || 'Unknown';
   return row;
 }
 
@@ -437,8 +446,23 @@ export async function exportSessionClean(req, res) {
       });
     }
 
+    const lineType = req.query.lineType;
+    if (lineType !== undefined && !['Wireless', 'Landline'].includes(lineType)) {
+      return res.status(400).json({ message: 'Invalid line type. Use Wireless or Landline.' });
+    }
+    const exportParams = lineType ? [id, lineType] : [id];
+    const lineFilter = lineType ? ` AND (${LINE_TYPE_SQL}) = $2` : '';
+    const suffix = lineType ? `CLEAN_${lineType.toUpperCase()}` : 'CLEAN';
     const safeSessionName = session.session_name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const cleanCount = parseInt(session.clean_count, 10);
+    let cleanCount = parseInt(session.clean_count, 10);
+    if (lineType) {
+      const countRes = await query(
+        `SELECT COUNT(*)::int AS total FROM session_records
+         WHERE session_id = $1 AND status = 'CLEAN'${lineFilter}`, exportParams
+      );
+      cleanCount = countRes.rows[0].total;
+      if (!cleanCount) return res.status(400).json({ message: `No clean ${lineType.toLowerCase()} numbers found in this file.` });
+    }
 
     if (format === 'xlsx' && cleanCount > 200000) {
       return res.status(400).json({
@@ -447,16 +471,16 @@ export async function exportSessionClean(req, res) {
     }
 
     if (String(req.query.check || '') === '1') {
-      return res.json({ ok: true, filename: `${safeSessionName}_CLEAN.${format === 'xlsx' ? 'xlsx' : 'csv'}` });
+      return res.json({ ok: true, filename: `${safeSessionName}_${suffix}.${format === 'xlsx' ? 'xlsx' : 'csv'}` });
     }
 
     if (format === 'xlsx') {
       const recordsRes = await query(
-        `SELECT raw_phone, normalized_phone, original_row_data
+        `SELECT raw_phone, normalized_phone, original_row_data, (${LINE_TYPE_SQL}) AS line_type
          FROM session_records
-         WHERE session_id = $1 AND status = 'CLEAN'
+         WHERE session_id = $1 AND status = 'CLEAN'${lineFilter}
          ORDER BY id ASC`,
-        [id]
+        exportParams
       );
       const exportData = recordsRes.rows.map(cleanExportRow);
       if (exportData.length === 0) {
@@ -470,17 +494,17 @@ export async function exportSessionClean(req, res) {
 
       markDownload(res);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_CLEAN.xlsx"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_${suffix}.xlsx"`);
       return res.send(buffer);
     }
 
     return streamCsv(res, {
-      filename: `${safeSessionName}_CLEAN.csv`,
-      sql: `SELECT raw_phone, normalized_phone, original_row_data
+      filename: `${safeSessionName}_${suffix}.csv`,
+      sql: `SELECT raw_phone, normalized_phone, original_row_data, (${LINE_TYPE_SQL}) AS line_type
             FROM session_records
-            WHERE session_id = $1 AND status = 'CLEAN'
+            WHERE session_id = $1 AND status = 'CLEAN'${lineFilter}
             ORDER BY id ASC`,
-      params: [id],
+      params: exportParams,
       emptyMessage: 'No clean records found for this session.',
       mapRow: cleanExportRow,
     });
@@ -549,13 +573,14 @@ export async function exportSessionFull(req, res) {
         Scrub_Status: r.status,
         Reason: r.reason,
         ...orig,
+        Line_Type: r.line_type || 'Unknown',
         Checked_At: new Date(r.created_at).toISOString(),
       };
     };
 
     if (format === 'xlsx') {
       const recordsRes = await query(
-        `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at
+        `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at, (${LINE_TYPE_SQL}) AS line_type
          FROM session_records
          WHERE session_id = $1
          ORDER BY id ASC`,
@@ -578,7 +603,7 @@ export async function exportSessionFull(req, res) {
 
     return streamCsv(res, {
       filename: `${safeSessionName}_AUDIT_REPORT.csv`,
-      sql: `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at
+      sql: `SELECT raw_phone, normalized_phone, status, reason, original_row_data, created_at, (${LINE_TYPE_SQL}) AS line_type
             FROM session_records
             WHERE session_id = $1
             ORDER BY id ASC`,

@@ -1,3 +1,5 @@
+import CleanDownloadButton from './CleanDownloadButton';
+import LineTypeCards from './LineTypeCards';
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { sessionApi } from '../../services/api';
@@ -95,21 +97,24 @@ const RESULT_CARDS = [
   { key: 'CLEAN', label: 'Clean numbers', field: 'clean_count', hint: '', icon: ShieldCheck, tone: 'emerald' },
 ];
 
-function ResultTiles({ session, cleanHint, selected, onSelect }) {
+function ResultTiles({ session, cleanHint, selected, onSelect, downloading, onDownload }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
       {RESULT_CARDS.map((card) => (
+        <div key={card.key} className="relative">
         <StatTile
-          key={card.key}
           label={card.label}
           value={formatNumber(session[card.field])}
           hint={card.key === 'CLEAN' ? cleanHint : card.hint}
           tone={card.tone}
-          icon={card.icon}
+          icon={card.key === 'CLEAN' ? undefined : card.icon}
           selected={selected === card.key}
           onClick={onSelect ? () => onSelect(card) : undefined}
         />
+        {card.key === 'CLEAN' && <CleanDownloadButton session={session} downloading={downloading} onDownload={onDownload} />}
+        </div>
       ))}
+      <LineTypeCards session={session} downloading={downloading} onDownload={onDownload} />
     </div>
   );
 }
@@ -121,17 +126,17 @@ function StatTile({ label, value, hint, tone = 'zinc', icon: Icon, selected, onC
     red: 'border-red-900/50 bg-red-950/30 text-red-300',
     emerald: 'border-emerald-900/50 bg-emerald-950/30 text-emerald-300',
   };
-  const className = `w-full rounded-xl border p-4 text-left ${tones[tone]} ${
+  const className = `flex h-36 w-full flex-col rounded-xl border p-4 text-left ${tones[tone]} ${
     onClick ? 'cursor-pointer transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/40' : ''
   } ${selected ? 'ring-2 ring-white/70' : ''}`;
   const body = (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-medium opacity-80">{label}</span>
+      <div className="flex min-h-8 items-start justify-between gap-2">
+        <span className={`min-w-0 text-[11px] font-medium leading-4 opacity-80 ${Icon ? '' : 'pr-3'}`}>{label}</span>
         {Icon && <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />}
       </div>
       <span className="mt-1.5 block font-mono text-2xl font-bold leading-none">{value}</span>
-      {hint && <span className="mt-1.5 block text-[11px] opacity-60">{hint}</span>}
+      {hint && <span className="mt-1.5 block text-[11px] leading-4 opacity-60">{hint}</span>}
     </>
   );
   if (!onClick) return <div className={className}>{body}</div>;
@@ -209,13 +214,13 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
     }, 50);
   };
 
-  const handleDownload = async (type, format) => {
+  const handleDownload = async (type, format, lineType) => {
     if (!activeSession) return;
-    const downloadKey = `${type}-${format}`;
+    const downloadKey = `${lineType || type}-${format}`;
     try {
       setDownloading(downloadKey);
       setDownloadError(null);
-      await sessionApi.downloadExport(activeSession.id, type, format);
+      await sessionApi.downloadExport(activeSession.id, type, format, lineType);
     } catch (err) {
       console.error('[STUDIO] Download error:', err);
       setDownloadError(err.message || 'Download blocked: BLA verification could not be confirmed.');
@@ -615,7 +620,7 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
           </div>
 
           <div className="mt-6">
-            <ResultTiles session={activeSession} cleanHint="Safe to dial" />
+            <ResultTiles session={activeSession} cleanHint="Safe to dial" downloading={downloading} onDownload={handleDownload} />
           </div>
 
           {errorMsg && (
@@ -652,6 +657,8 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
             cleanHint={`${cleanRate.toFixed(1)}% of file`}
             selected={cardView?.key}
             onSelect={handleCardSelect}
+            downloading={downloading}
+            onDownload={handleDownload}
           />
 
           {cardView && (
