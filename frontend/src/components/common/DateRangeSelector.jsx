@@ -15,7 +15,7 @@ export function DateRangeSelector({ value, onChange }) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
         setIsCustomMode(false);
-      }
+       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);

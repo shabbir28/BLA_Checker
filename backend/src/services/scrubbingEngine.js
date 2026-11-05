@@ -6,6 +6,7 @@ import { query, pool } from '../config/db.js';
 import { normalizePhone, detectPhoneColumn } from '../utils/phoneNormalizer.js';
 import { copyIntoTable, pgJson, pgText } from '../utils/bulkCopy.js';
 import blaService from './blaService.js';
+import { requireVerifiedResult } from '../utils/blaValidation.js';
 
 
 
@@ -255,12 +256,7 @@ class ScrubbingEngine {
       });
 
       for (const phone of freshNumbers) {
-        const res = bulkResults.get(phone) || {
-          isDnc: false,
-          status: 'CLEAN',
-          reason: 'Good - Landline',
-          raw: { provider: 'Blacklist Alliance', suppressed: false, status: 'CLEAN' },
-        };
+        const res = requireVerifiedResult(bulkResults.get(phone));
 
         const indices = validPhoneMap.get(phone);
         if (res.isDnc) {
