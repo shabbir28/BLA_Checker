@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { BlacklistAlliance } from 'blacklist-alliance-client';
+import { validateBulkResponse } from '../utils/blaValidation.js';
 
 const BLACKLIST_CODES = new Set([
   'anti-telemarketing',
@@ -22,11 +23,6 @@ function nanp(value) {
   let digits = digitsOnly(value);
   if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
   return digits.length === 10 ? digits : '';
-}
-
-function phoneList(value) {
-  if (!Array.isArray(value)) return [];
-  return value.map(nanp).filter(Boolean);
 }
 
 function reasonText(reasonsMap, phone) {
@@ -63,8 +59,9 @@ function stamp(extra) {
   };
 }
 
-class BlaService {
-  constructor() {
+export class BlaService {
+  constructor(clientFactory = (key, options) => new BlacklistAlliance(key, options)) {
+    this.clientFactory = clientFactory;
     this.configCache = null;
     this.lastCacheTime = 0;
   }
@@ -123,7 +120,7 @@ class BlaService {
   }
 
   /**
-   * Verify phone numbers in bulk using the official Blacklist Alliance client (identical to Balitech CRM)
+   * Verify phone numbers in bulk using the Blacklist Alliance client with validated, repeated batches
    * @param {string[]} phoneNumbers Array of normalized 10-digit phone numbers
    * @param {function} onProgress Optional progress callback (completed, total)
    * @returns {Promise<Map<string, { isDnc: boolean, status: string, reason: string, raw: object }>>}
@@ -138,73 +135,77 @@ class BlaService {
       throw new Error('Blacklist Alliance API Key is required for BLA verification.');
     }
 
-    const uniquePhones = Array.from(new Set(phoneNumbers.map(nanp).filter(Boolean)));
-    if (uniquePhones.length === 0) return results;
-
-    const client = new BlacklistAlliance(config.api_key, {
+    const normalized = phoneNumbers.map(nanp);
+    if (normalized.some((phone) => !phone)) {
+      throw new Error('BLA verification received an invalid phone number.');
+    }
+    const uniquePhones = Array.from(new Set(normalized));
+    const client = this.clientFactory(config.api_key, {
       timeout: 60000,
       retries: 3,
       defaultVersion: 'v5',
       logger: null,
     });
+    // Own the batching: the SDK merger can conceal unsuccessful/partial batches.
+    const batchSize = Math.min(5000, Math.max(1, Number(config.batch_size) || 5000));
+    const passes = 2;
+    const requestInterval = Math.ceil(1000 / Math.max(1, Number(config.rate_limit_per_sec) || 1));
+    let lastRequestAt = 0;
+    let completed = 0;
+    console.log(`[BLA SERVICE] Verifying ${uniquePhones.length} numbers with ${passes} bulk passes.`);
 
-    console.log(`[BLA SERVICE] Starting bulk lookup for ${uniquePhones.length} numbers using official BLA client (v5)...`);
-
-    const bulkResult = await client.bulkLookupSimple(uniquePhones, {
-      responseFormat: 'json',
-      autoBatch: true,
-      onProgress: (info) => {
-        if (onProgress && info?.completed && info?.total) {
-          onProgress(info.completed, info.total);
+    for (let offset = 0; offset < uniquePhones.length; offset += batchSize) {
+      const batch = uniquePhones.slice(offset, offset + batchSize);
+      const responses = [];
+      for (let pass = 0; pass < passes; pass++) {
+        const wait = requestInterval - (Date.now() - lastRequestAt);
+        if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+        lastRequestAt = Date.now();
+        let response;
+        try {
+          response = await client.bulkLookupSimple(batch, { responseFormat: 'json', autoBatch: false });
+        } catch {
+          // Do not expose SDK errors containing the API key in request URLs.
+          throw new Error('BLA request failed. No clean list was approved; please retry checking.');
         }
-      },
-    });
-
-    const rawSuppressed = bulkResult?.supression ?? bulkResult?.suppression ?? [];
-    const suppressed = Array.isArray(rawSuppressed) ? rawSuppressed : [];
-    const reasons = bulkResult?.reasons || {};
-    const wirelessSet = new Set(phoneList(bulkResult?.wireless));
-
-    const suppressedSet = new Set(suppressed.map(nanp).filter(Boolean));
-    for (const reasonPhone of Object.keys(reasons)) {
-      const normalized = nanp(reasonPhone);
-      if (normalized) suppressedSet.add(normalized);
-    }
-
-    for (const phone of uniquePhones) {
-      if (suppressedSet.has(phone)) {
-        const rawReason = reasonText(reasons, phone);
-        const reason = portalLabel(rawReason);
-        results.set(phone, {
-          isDnc: true,
-          status: 'BLA_DNC',
-          reason,
-          raw: stamp({ suppressed: true, reason, code: rawReason || null }),
-        });
-      } else {
-        const line = wirelessSet.has(phone) ? 'Wireless' : 'Landline';
-        results.set(phone, {
-          isDnc: false,
-          status: 'CLEAN',
-          reason: `Good - ${line}`,
-          raw: stamp({ suppressed: false, status: 'CLEAN', line }),
-        });
+        responses.push(validateBulkResponse(response, batch));
+        completed += batch.length;
+        if (onProgress) await onProgress(completed, uniquePhones.length * passes);
+      }
+      for (const phone of batch) {
+        const observations = responses.map((r) => ({
+          suppressed: r.suppressed.has(phone),
+          code: reasonText(r.reasons, phone) || null,
+          line: r.wireless.has(phone) ? 'Wireless' : 'Landline',
+        }));
+        const isDnc = observations.some((r) => r.suppressed);
+        const conflict = observations.some((r) => r.suppressed !== observations[0].suppressed);
+        // BLA API can legitimately return slightly different results on consecutive calls.
+        // Instead of hard-failing the entire session, log the conflict and use conservative
+        // logic: if ANY pass says DNC, treat as DNC (safer for compliance).
+        if (conflict) {
+          console.warn(`[BLA] Conflicting results for ${phone} across passes — using conservative DNC result (isDnc=${isDnc}). observations:`, JSON.stringify(observations));
+        }
+        const evidence = { verification: 'bulk-double-check-v1', observations, conflict };
+        if (isDnc) {
+          const code = [...new Set(observations.filter((r) => r.suppressed && r.code).map((r) => r.code))].join(',');
+          const reason = portalLabel(code);
+          results.set(phone, {
+            isDnc: true, status: 'BLA_DNC', reason,
+            raw: stamp({ suppressed: true, reason, code: code || null, ...evidence }),
+          });
+        } else {
+          // A changing line type is not a verified wireless/landline classification.
+          const line = observations.every((r) => r.line === observations[0].line) ? observations[0].line : 'Unknown';
+          results.set(phone, {
+            isDnc: false, status: 'CLEAN', reason: `Good - ${line}`,
+            raw: stamp({ suppressed: false, status: 'CLEAN', line, ...evidence }),
+          });
+        }
       }
     }
-
-    // Ensure every input number is in the results map
-    for (const phone of phoneNumbers) {
-      const clean = nanp(phone);
-      if (clean && results.has(clean)) {
-        if (phone !== clean) results.set(phone, results.get(clean));
-      } else if (!results.has(phone)) {
-        results.set(phone, {
-          isDnc: false,
-          status: 'CLEAN',
-          reason: 'Good - Landline',
-          raw: stamp({ suppressed: false, status: 'CLEAN' }),
-        });
-      }
+    for (let i = 0; i < phoneNumbers.length; i++) {
+      if (phoneNumbers[i] !== normalized[i]) results.set(phoneNumbers[i], results.get(normalized[i]));
     }
 
     return results;
