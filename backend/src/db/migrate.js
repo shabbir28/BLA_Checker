@@ -66,6 +66,7 @@ export async function runMigrations() {
       );
 
       ALTER TABLE checking_sessions ADD COLUMN IF NOT EXISTS empty_numbers INT DEFAULT 0;
+      ALTER TABLE checking_sessions ADD COLUMN IF NOT EXISTS integration_metadata JSONB;
       ALTER TABLE checking_sessions ADD COLUMN IF NOT EXISTS bla_verified BOOLEAN DEFAULT FALSE;
       UPDATE checking_sessions SET bla_verified = TRUE WHERE status = 'COMPLETED' AND (bla_verified IS NULL OR bla_verified = FALSE);
 

@@ -249,6 +249,11 @@ export function SessionDetails({ sessionId, onBack }) {
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2.5">
               <h2 className="truncate text-xl font-bold tracking-tight text-white">{session.session_name}</h2>
+              {session.integration_metadata && (
+                <p className="text-xs text-emerald-300">
+                  API check · User: {session.integration_metadata.externalUserId || 'Not provided'} · Reference: {session.integration_metadata.reference || 'Not provided'}
+                </p>
+              )}
               <StatusBadge status={session.status} size="xs" />
             </div>
             <p className="mt-1 font-mono text-xs text-zinc-500">

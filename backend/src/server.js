@@ -11,6 +11,7 @@ import authRoutes from './routes/authRoutes.js';
 import dncRoutes from './routes/dncRoutes.js';
 import sessionRoutes from './routes/sessionRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
+import integrationRoutes from './routes/integrationRoutes.js';
 import { pool } from './config/db.js';
 import { ipAllowlistMiddleware, securityGate } from './middleware/ipAllowlist.js';
 import './config/uploads.js';
@@ -61,6 +62,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/dnc', dncRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/v1', integrationRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {
