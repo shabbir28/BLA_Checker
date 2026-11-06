@@ -29,6 +29,8 @@ async function fixture(t, { failAudit = false, configured = true } = {}) {
     files: { writeFile: async (...args) => files.push(args), unlink: async () => files.push('deleted') },
     processSession: async (...args) => jobs.push(args),
   }));
+  // Model an IP denied by the dashboard gate, using the production mount order.
+  app.use('/api', (req, res) => res.status(404).json({ message: 'IP blocked' }));
   app.use((error, req, res, next) => res.status(500).json({ message: 'Failed' }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
@@ -79,4 +81,13 @@ test('invalid keys, invalid input and sessions outside API ownership are rejecte
 test('integration stays disabled without server configuration', async (t) => {
   const f = await fixture(t, { configured: false });
   assert.equal((await f.request('/checks', { phones: ['1'] })).status, 503);
+});
+
+test('API key access works before the IP gate without opening dashboard routes', async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.request('/checks', { phones: [] })).status, 400);
+  assert.equal((await f.request('/checks', { phones: [] }, '')).status, 401);
+  const blocked = await f.request('/../admin/users');
+  assert.equal(blocked.status, 404);
+  assert.deepEqual(await blocked.json(), { message: 'IP blocked' });
 });

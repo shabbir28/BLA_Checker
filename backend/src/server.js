@@ -35,6 +35,9 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
 app.get('/api/security/gate', securityGate);
+// Server-to-server integration authenticates with its own API key, regardless
+// of caller IP. Keep all dashboard/user/admin APIs behind the IP allowlist.
+app.use('/api/v1', integrationRoutes);
 app.use('/api', ipAllowlistMiddleware);
 
 // Health Check Endpoint
@@ -62,7 +65,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/dnc', dncRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/v1', integrationRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

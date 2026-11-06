@@ -13,8 +13,11 @@ not in browser JavaScript. This is a separate key from the upstream Blacklist Al
 3. Generate a key with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
 4. Set `INTEGRATION_API_KEY` to that value in the backend environment and set
    `INTEGRATION_OWNER_EMAIL` to your existing active BLA account's exact email.
-5. Restart the backend with updated environment variables. If IP allowlisting is
-   enabled, add the other server's public outbound IP in Security.
+5. Restart the backend with updated environment variables. Integration routes
+   under `/api/v1` use API-key authentication and do not require an IP allowlist
+   entry. Dashboard and other API routes retain their existing IP protection.
+   The reverse proxy must pass `/api/v1/` to the backend without a separate
+   nginx IP/auth_request gate (the repository's `/api/` proxy already does this).
 
 Every accepted request creates a normal session owned by that account, visible in
 **My Sessions** (and administrators' **All Sessions**) with an `[API]` name.
@@ -64,7 +67,7 @@ This configuration supports one external integration; rotate the key by replacin
 the environment value and restarting. Existing sessions remain available.
 
 Errors: 400 invalid input, 401 wrong key, 403 inactive owner, 404 inaccessible
-session (or blocked IP), 429 rate limit, 503 missing configuration, 500 server error.
+session, 429 rate limit, 503 missing configuration, 500 server error.
 Limits per caller IP and backend process: 10 submissions/minute, 120 total
 requests/minute. Honor Retry-After on 429.
 
