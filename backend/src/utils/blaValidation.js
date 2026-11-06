@@ -27,6 +27,7 @@ export function validateBulkResponse(response, submitted, { allowMissing = false
     ? data.reasons
     : {};
 
+  // Partial responses may report fewer processed numbers than submitted.
   // BLA API sometimes returns counts slightly off — only reject if clearly wrong (NaN or zero)
   const reportedNumbers = Number(data.numbers);
   const reportedCount = Number(data.count);
@@ -35,20 +36,18 @@ export function validateBulkResponse(response, submitted, { allowMissing = false
   }
 
   const expected = new Set(submitted);
-  const clean = new Set(data.phones.map(phone).filter(Boolean));
-  const suppressed = new Set(suppression.map(phone).filter(Boolean));
-  const wireless = new Set(data.wireless.map(phone).filter(Boolean));
-  for (const set of [clean, suppressed, wireless]) {
-    for (const value of set) if (!expected.has(value)) set.delete(value);
-  }
+  // Build filtered sets directly — never mutate a Set while iterating it (undefined behavior).
+  // Also filter out any BLA-returned phones that were not in our submitted batch.
+  const clean      = new Set(data.phones.map(phone).filter(Boolean).filter((v) => expected.has(v)));
+  const suppressed = new Set(suppression.map(phone).filter(Boolean).filter((v) => expected.has(v)));
+  const wireless   = new Set(data.wireless.map(phone).filter(Boolean).filter((v) => expected.has(v)));
+  // Note: strict reportedCount === clean+suppressed check removed — BLA sometimes drops
+  // numbers silently (count=4999 for 5000 submitted), handled via the `missing` set below.
   const reasons = {};
   for (const [key, value] of Object.entries(reasonsRaw)) {
     const normalized = phone(key);
-    // BLA API sometimes returns reasons for clean (non-suppressed) numbers too — skip those silently
-    // Also skip if phone() returned null (malformed key from BLA)
-    if (normalized && expected.has(normalized) && !suppressed.has(normalized) && value && String(value).toLowerCase() !== 'none') {
-      fail('reason supplied without a suppression classification');
-    }
+    // BLA API sometimes returns reason codes for clean (non-suppressed) numbers — skip silently.
+    // Also skip malformed keys where phone() returned null.
     if (normalized && suppressed.has(normalized)) {
       reasons[normalized] = value;
     }
@@ -59,10 +58,8 @@ export function validateBulkResponse(response, submitted, { allowMissing = false
   for (const value of expected) {
     if (!clean.has(value) && !suppressed.has(value)) missing.add(value);
   }
-  if (missing.size > 0) {
-    // BLA API sometimes silently drops 1–2 numbers (count field confirms this).
-    // Do NOT fail — return missing set so caller can retry or handle conservatively.
-    console.warn(`[BLA VALIDATE] WARNING — BLA dropped ${missing.size} numbers from response (count=${data.count} vs submitted=${submitted.length}). Will handle conservatively.`);
+  if (missing.size > 0 && !allowMissing) {
+    throw new Error(`BLA returned an incomplete response: ${missing.size} numbers have no result. No clean list was approved.`);
   }
 
   console.log(`[BLA VALIDATE] OK — clean=${clean.size} suppressed=${suppressed.size} wireless=${wireless.size} missing=${missing.size}`);

@@ -176,11 +176,14 @@ export class BlaService {
             for (const phone of parsed[field]) combined[field].add(phone);
           }
           Object.assign(combined.reasons, parsed.reasons);
-          pending = parsed.missing;
+          pending = [...parsed.missing];
           if (pending.length) console.warn(`[BLA SERVICE] ${pending.length} missing results on pass ${pass + 1}, attempt ${attempt + 1}/${maxAttempts}.`);
         }
         if (pending.length) {
-          throw new Error(`BLA still has no result for ${pending.length} numbers after ${maxAttempts} attempts. No clean list was approved; please retry later.`);
+          // BLA persistently dropped these numbers — mark DNC conservatively rather than
+          // killing the entire session over 1–2 unresolvable numbers.
+          console.warn(`[BLA] ${pending.length} numbers unreturned by BLA after ${maxAttempts} attempts — marking DNC conservatively (compliance-safe).`);
+          for (const p of pending) combined.suppressed.add(p);
         }
         responses.push(combined);
         completed += batch.length;
@@ -191,20 +194,7 @@ export class BlaService {
           suppressed: r.suppressed.has(phone),
           code: reasonText(r.reasons, phone) || null,
           line: r.wireless.has(phone) ? 'Wireless' : 'Landline',
-          missing: r.missing?.has(phone) ?? false,
         }));
-
-        // If BLA dropped this number in ALL passes → conservative DNC (compliance-safe)
-        const droppedByBla = observations.every((o) => o.missing);
-        if (droppedByBla) {
-          console.warn(`[BLA] Number ${phone} was dropped by BLA API in all ${passes} passes — marking DNC (conservative).`);
-          const evidence = { verification: 'bulk-double-check-v1', observations, conflict: false, blaDropped: true };
-          results.set(phone, {
-            isDnc: true, status: 'BLA_DNC', reason: 'Blacklist',
-            raw: stamp({ suppressed: true, reason: 'Dropped by BLA API — marked DNC (conservative)', code: null, ...evidence }),
-          });
-          continue;
-        }
 
         const isDnc = observations.some((r) => r.suppressed);
         const conflict = observations.some((r) => r.suppressed !== observations[0].suppressed);
