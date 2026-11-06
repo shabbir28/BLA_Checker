@@ -38,11 +38,13 @@ test('two explicit clean responses preserve types and input aliases', async () =
 });
 
 for (const order of ['dnc-first', 'dnc-second']) {
-  test(`conflicting DNC/clean responses block the entire result: ${order}`, async () => {
+  test(`conflicting DNC/clean responses keep the DNC classification: ${order}`, async () => {
     const replies = [response([A], [A]), response([A])];
     if (order === 'dnc-second') replies.reverse();
     const { instance } = service(replies);
-    await assert.rejects(instance.verifyBulk([A]), /conflicting DNC and clean/);
+    const result = (await instance.verifyBulk([A])).get(A);
+    assert.equal(result.status, 'BLA_DNC');
+    assert.equal(result.raw.conflict, true);
   });
 }
 
@@ -61,7 +63,7 @@ test('each batch is validated before moving to the next', async () => {
 });
 
 test('missing phones cannot default to clean even when counts claim success', () => {
-  const partial = response([A, B]); partial.phones = [A];
+  const partial = response([A, B]); partial.phones = [A]; partial.count = 1;
   assert.throws(() => validateBulkResponse(partial, [A, B]), /incomplete/);
 });
 
@@ -107,4 +109,27 @@ test('engine rejects missing, legacy and inconsistent results', () => {
     { isDnc: true, status: 'CLEAN', raw: { suppressed: true, verification: 'bulk-double-check-v1' } }]) {
     assert.throws(() => requireVerifiedResult(result), /unverified/);
   }
+});
+
+
+test('recover only the missing phone and retain earlier DNC results', async () => {
+  const partial = response([A, B], [A]); partial.phones = []; partial.count = 1;
+  const { instance, calls } = service([partial, response([B]), response([A, B], [A])]);
+  const results = await instance.verifyBulk([A, B]);
+  assert.deepEqual(calls.map((c) => c.phones), [[A, B], [B], [A, B]]);
+  assert.equal(results.get(A).status, 'BLA_DNC');
+  assert.equal(results.get(B).status, 'CLEAN');
+});
+
+test('stop after three attempts when a phone remains missing', async () => {
+  const empty = { ...response([A]), count: 0, phones: [], wireless: [] };
+  const { instance, calls } = service([empty, empty, empty]);
+  await assert.rejects(instance.verifyBulk([A]), /no result for 1 numbers after 3 attempts/);
+  assert.equal(calls.length, 3);
+});
+
+test('recovered DNC cannot become clean on the second pass', async () => {
+  const empty = { ...response([A]), count: 0, phones: [], wireless: [] };
+  const { instance } = service([empty, response([A], [A]), response([A])]);
+  assert.equal((await instance.verifyBulk([A])).get(A).status, 'BLA_DNC');
 });
