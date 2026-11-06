@@ -158,17 +158,31 @@ export class BlaService {
       const batch = uniquePhones.slice(offset, offset + batchSize);
       const responses = [];
       for (let pass = 0; pass < passes; pass++) {
-        const wait = requestInterval - (Date.now() - lastRequestAt);
-        if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
-        lastRequestAt = Date.now();
-        let response;
-        try {
-          response = await client.bulkLookupSimple(batch, { responseFormat: 'json', autoBatch: false });
-        } catch {
-          // Do not expose SDK errors containing the API key in request URLs.
-          throw new Error('BLA request failed. No clean list was approved; please retry checking.');
+        const combined = { clean: new Set(), suppressed: new Set(), wireless: new Set(), reasons: {} };
+        let pending = batch;
+        const maxAttempts = 3;
+        for (let attempt = 0; attempt < maxAttempts && pending.length; attempt++) {
+          const wait = requestInterval - (Date.now() - lastRequestAt);
+          if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+          lastRequestAt = Date.now();
+          let response;
+          try {
+            response = await client.bulkLookupSimple(pending, { responseFormat: 'json', autoBatch: false });
+          } catch {
+            throw new Error('BLA request failed. No clean list was approved; please retry checking.');
+          }
+          const parsed = validateBulkResponse(response, pending, { allowMissing: true });
+          for (const field of ['clean', 'suppressed', 'wireless']) {
+            for (const phone of parsed[field]) combined[field].add(phone);
+          }
+          Object.assign(combined.reasons, parsed.reasons);
+          pending = parsed.missing;
+          if (pending.length) console.warn(`[BLA SERVICE] ${pending.length} missing results on pass ${pass + 1}, attempt ${attempt + 1}/${maxAttempts}.`);
         }
-        responses.push(validateBulkResponse(response, batch));
+        if (pending.length) {
+          throw new Error(`BLA still has no result for ${pending.length} numbers after ${maxAttempts} attempts. No clean list was approved; please retry later.`);
+        }
+        responses.push(combined);
         completed += batch.length;
         if (onProgress) await onProgress(completed, uniquePhones.length * passes);
       }
@@ -177,7 +191,21 @@ export class BlaService {
           suppressed: r.suppressed.has(phone),
           code: reasonText(r.reasons, phone) || null,
           line: r.wireless.has(phone) ? 'Wireless' : 'Landline',
+          missing: r.missing?.has(phone) ?? false,
         }));
+
+        // If BLA dropped this number in ALL passes → conservative DNC (compliance-safe)
+        const droppedByBla = observations.every((o) => o.missing);
+        if (droppedByBla) {
+          console.warn(`[BLA] Number ${phone} was dropped by BLA API in all ${passes} passes — marking DNC (conservative).`);
+          const evidence = { verification: 'bulk-double-check-v1', observations, conflict: false, blaDropped: true };
+          results.set(phone, {
+            isDnc: true, status: 'BLA_DNC', reason: 'Blacklist',
+            raw: stamp({ suppressed: true, reason: 'Dropped by BLA API — marked DNC (conservative)', code: null, ...evidence }),
+          });
+          continue;
+        }
+
         const isDnc = observations.some((r) => r.suppressed);
         const conflict = observations.some((r) => r.suppressed !== observations[0].suppressed);
         // BLA API can legitimately return slightly different results on consecutive calls.
