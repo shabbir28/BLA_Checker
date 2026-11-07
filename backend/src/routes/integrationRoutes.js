@@ -3,6 +3,7 @@ import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import rateLimit from 'express-rate-limit';
+import multer from 'multer';
 import { pool, query } from '../config/db.js';
 import { UPLOADS_DIR } from '../config/uploads.js';
 import scrubbingEngine from '../services/scrubbingEngine.js';
@@ -39,6 +40,20 @@ export function createIntegrationRouter(deps = {}) {
   const processSession = deps.processSession || scrubbingEngine.processSession.bind(scrubbingEngine);
   const config = deps.config || (() => ({ key: process.env.INTEGRATION_API_KEY, owner: process.env.INTEGRATION_OWNER_EMAIL }));
   const router = Router();
+  const submissionLimit = rateLimit({ windowMs: 60000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false });
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: deps.uploadsDir || UPLOADS_DIR,
+      filename: (req, file, cb) => cb(null, `api-${randomUUID()}.csv`),
+    }),
+    limits: { fileSize: 150 * 1024 * 1024, files: 1, fields: 4, fieldSize: 1024 },
+    fileFilter: (req, file, cb) => {
+      if (path.extname(file.originalname).toLowerCase() === '.csv') return cb(null, true);
+      const error = new Error('Only CSV files are supported.');
+      error.status = 400;
+      cb(error);
+    },
+  });
   router.use(rateLimit({ windowMs: 60000, limit: 120, standardHeaders: 'draft-7', legacyHeaders: false }));
   router.use(async (req, res, next) => {
     const { key, owner } = config();
@@ -54,19 +69,40 @@ export function createIntegrationRouter(deps = {}) {
     } catch (error) { next(error); }
   });
 
-  router.post('/checks', rateLimit({ windowMs: 60000, limit: 10, standardHeaders: 'draft-7', legacyHeaders: false }), async (req, res, next) => {
+  async function startCheck(req, res, next) {
     let input;
-    try { input = validateCheck(req.body); }
-    catch (error) { return res.status(400).json({ message: error.message }); }
+    let phoneColumn = 'phone';
+    try {
+      if (req.file) {
+        input = validateCheck({ ...req.body, phones: [''] });
+        const column = req.body.phoneColumn;
+        if (column !== undefined && (typeof column !== 'string' || !column.trim() || column.length > 150 || /[\r\n\0]/.test(column))) {
+          throw new Error('phoneColumn must be a nonempty column name of at most 150 characters.');
+        }
+        const preview = await scrubbingEngine.previewFile(req.file.path, req.file.originalname);
+        if (!preview.previewRows.length) throw new Error('CSV must contain a header row and at least one data row.');
+        phoneColumn = column || preview.detectedPhoneColumn;
+        if (!phoneColumn || !preview.columns.includes(phoneColumn)) {
+          throw new Error('Phone column not found. Send phoneColumn matching an exact CSV header.');
+        }
+      } else {
+        input = validateCheck(req.body);
+      }
+    } catch (error) {
+      if (req.file) await files.unlink(req.file.path).catch(() => {});
+      return res.status(400).json({ message: error.message });
+    }
     const id = randomUUID();
-    const filename = `api-${id}.csv`;
-    const filePath = path.join(UPLOADS_DIR, filename);
+    const filename = req.file ? path.basename(req.file.originalname).slice(0, 255) : `api-${id}.csv`;
+    const filePath = req.file?.path || path.join(UPLOADS_DIR, filename);
     const metadata = { source: 'INTEGRATION_API', externalUserId: input.externalUserId, reference: input.reference };
     let client;
     let committed = false;
     try {
-      const csv = 'phone\n' + input.phones.map((phone) => `"${phone.replaceAll('"', '""')}"`).join('\n') + '\n';
-      await files.writeFile(filePath, csv, { flag: 'wx', mode: 0o600 });
+      if (!req.file) {
+        const csv = 'phone\n' + input.phones.map((phone) => `"${phone.replaceAll('"', '""')}"`).join('\n') + '\n';
+        await files.writeFile(filePath, csv, { flag: 'wx', mode: 0o600 });
+      }
       client = await connect();
       await client.query('BEGIN');
       const result = await client.query(
@@ -77,12 +113,14 @@ export function createIntegrationRouter(deps = {}) {
       await client.query(
         `INSERT INTO audit_logs (user_id, user_email, action, resource_type, resource_id, details, ip_address)
          VALUES ($1, $2, 'API_CHECK_REQUESTED', 'SESSION', $3, $4, $5)`,
-        [req.user.id, req.user.email, id, JSON.stringify({ ...metadata, totalRows: input.phones.length }), getClientIp(req)]
+        [req.user.id, req.user.email, id, JSON.stringify({ ...metadata, ...(req.file
+          ? { filename, fileSize: req.file.size, phoneColumn, inputType: 'CSV' }
+          : { totalRows: input.phones.length }) }), getClientIp(req)]
       );
       await client.query('COMMIT');
       committed = true;
       setImmediate(() => {
-        Promise.resolve().then(() => processSession(id, filePath, 'phone', req.user))
+        Promise.resolve().then(() => processSession(id, filePath, phoneColumn, req.user))
           .catch((error) => console.error('[INTEGRATION] Worker failed:', error));
       });
       res.location(`/api/v1/checks/${id}`);
@@ -92,6 +130,12 @@ export function createIntegrationRouter(deps = {}) {
       if (!committed) await files.unlink(filePath).catch(() => {});
       next(error);
     } finally { client?.release(); }
+  }
+
+  router.post('/checks', submissionLimit, startCheck);
+  router.post('/checks/upload', submissionLimit, upload.single('file'), (req, res, next) => {
+    if (!req.file) return res.status(400).json({ message: 'CSV file is required in the file form field.' });
+    return startCheck(req, res, next);
   });
 
   router.use('/checks/:id', async (req, res, next) => {

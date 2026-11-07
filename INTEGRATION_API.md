@@ -42,6 +42,38 @@ and classified by the normal engine; duplicate numbers are also audited.
 Response: HTTP **202**, with `sessionId`, `session`, `statusUrl`, and `recordsUrl`.
 The URLs are relative to the production origin. Acceptance does not mean verified.
 
+## Upload a complete CSV file
+
+Use `POST /checks/upload` with `multipart/form-data` and the same Bearer key.
+Send the CSV as the **file** field (maximum 150 MiB). Include a header row.
+Optional text fields: `phoneColumn` (exact header name; otherwise auto-detected),
+`sessionName`, `externalUserId`, and `reference`. If auto-detection fails, specify
+`phoneColumn`. All CSV columns are preserved in the session records and exports.
+
+```bash
+curl 'https://bla.balitech.org:52377/api/v1/checks/upload' \
+  -H "Authorization: Bearer $BLA_INTEGRATION_KEY" \
+  -F 'file=@leads.csv;type=text/csv' \
+  -F 'phoneColumn=phone' \
+  -F 'sessionName=CRM CSV check' \
+  -F 'externalUserId=agent-42' \
+  -F 'reference=campaign-100'
+```
+
+In Postman use **Body > form-data**, set `file` to type **File**, and choose
+your CSV. Other fields use type **Text**. Do not manually set Content-Type:
+Postman/curl must supply the multipart boundary. The reverse proxy must allow
+the complete multipart request size (the repository config allows 150 MB;
+files near that boundary need a slightly larger proxy limit).
+
+Response is **202** with the same `sessionId`, `statusUrl`, and `recordsUrl` as
+JSON submissions. One file creates one session and request audit, with no need
+for the caller to split it into 10,000-number JSON batches. Large files use the
+existing file-processing engine and server memory; the 10,000-number limit only
+applies to JSON requests. Empty/header-only CSVs and unknown phone columns are
+rejected before queuing. Processing failures are reported on the session.
+Both submission endpoints share the 10 submissions/minute limit.
+
 ## Poll, read and download
 
 Send the same Authorization header to all endpoints:
