@@ -81,6 +81,10 @@ export const sessionApi = {
     const token = localStorage.getItem('bla_token') || '';
     return `/api/sessions/${id}/export/clean?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
   },
+  getBlaDncExportUrl: (id, format = 'csv') => {
+    const token = localStorage.getItem('bla_token') || '';
+    return `/api/sessions/${id}/export/bla-dnc?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  },
   getFullExportUrl: (id, format = 'csv') => {
     const token = localStorage.getItem('bla_token') || '';
     return `/api/sessions/${id}/export/full?format=${format}${token ? `&token=${encodeURIComponent(token)}` : ''}`;

@@ -195,6 +195,28 @@ export function SessionDetails({ sessionId, onBack }) {
                   </button>
                 </>
               )}
+              {session.bla_dnc_count > 0 && (
+                <>
+                  <button
+                    onClick={() => handleDownload('bla-dnc', 'csv')}
+                    disabled={Boolean(downloading)}
+                    className="btn-secondary btn-sm !border-red-900/50 !text-red-300 hover:!bg-red-950/40"
+                    title="Download DNC from BLA as CSV"
+                  >
+                    {downloading === 'bla-dnc-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                    BLA DNC (CSV)
+                  </button>
+                  <button
+                    onClick={() => handleDownload('bla-dnc', 'xlsx')}
+                    disabled={Boolean(downloading)}
+                    className="btn-secondary btn-sm !border-red-900/50 !text-red-300 hover:!bg-red-950/40"
+                    title="Download DNC from BLA as Excel"
+                  >
+                    {downloading === 'bla-dnc-xlsx' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5 text-red-400" />}
+                    BLA DNC (Excel)
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => handleDownload('full', 'csv')}
                 disabled={Boolean(downloading)}
@@ -290,6 +312,18 @@ export function SessionDetails({ sessionId, onBack }) {
                 {s.hint && <span className="mt-1 block text-[11px] text-zinc-600">{s.hint}</span>}
               </button>
               {s.id === 'CLEAN' && <CleanDownloadButton session={session} downloading={downloading} onDownload={handleDownload} />}
+              {s.id === 'BLA_DNC' && (
+                <button
+                  type="button"
+                  className="absolute right-3 top-3 rounded p-1 text-red-300 transition hover:bg-red-900/40 focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={session.status !== 'COMPLETED' || session.bla_verified === false || !session.bla_dnc_count || Boolean(downloading)}
+                  onClick={() => handleDownload('bla-dnc', 'csv')}
+                  aria-label="Download BLA DNC numbers as CSV"
+                  title="Download BLA DNC numbers as CSV"
+                >
+                  {downloading === 'bla-dnc-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                </button>
+              )}
               </div>
             );
           })}
@@ -349,6 +383,7 @@ export function SessionDetails({ sessionId, onBack }) {
                     <th>Raw number</th>
                     <th>Normalized</th>
                     <th>Status</th>
+                    <th>Line type</th>
                     <th>Result note</th>
                     <th className="text-right">Checked at</th>
                   </tr>
@@ -360,6 +395,19 @@ export function SessionDetails({ sessionId, onBack }) {
                       <td className="font-mono font-semibold text-white">{rec.normalized_phone || '—'}</td>
                       <td>
                         <StatusBadge status={rec.status} size="xs" />
+                      </td>
+                      <td>
+                        {rec.line_type && rec.line_type !== 'Unknown' ? (
+                          <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium font-mono ${
+                            rec.line_type === 'Wireless'
+                              ? 'bg-blue-950/60 text-blue-300 border border-blue-800/50'
+                              : 'bg-purple-950/60 text-purple-300 border border-purple-800/50'
+                          }`}>
+                            {rec.line_type}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-600">—</span>
+                        )}
                       </td>
                       <td className="max-w-md truncate text-xs text-zinc-400">{rec.reason || 'Verified'}</td>
                       <td className="whitespace-nowrap text-right text-xs text-zinc-500">

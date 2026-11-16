@@ -9,6 +9,7 @@ import {
   getSession,
   getSessionRecords,
   exportSessionClean,
+  exportSessionBlaDnc,
   exportSessionFull,
   deleteSession,
 } from '../controllers/sessionController.js';
@@ -51,6 +52,8 @@ router.get('/list', listSessions);
 router.get('/:id', getSession);
 router.get('/:id/records', getSessionRecords);
 router.get('/:id/export/clean', exportSessionClean);
+router.get('/:id/export/bla-dnc', exportSessionBlaDnc);
+router.get('/:id/export/dnc', exportSessionBlaDnc);
 router.get('/:id/export/full', exportSessionFull);
 router.delete('/:id', deleteSession);
 

@@ -8,7 +8,7 @@ import { pool, query } from '../config/db.js';
 import { UPLOADS_DIR } from '../config/uploads.js';
 import scrubbingEngine from '../services/scrubbingEngine.js';
 import { getClientIp } from '../utils/clientIp.js';
-import { getSession, getSessionRecords, exportSessionClean, exportSessionFull } from '../controllers/sessionController.js';
+import { getSession, getSessionRecords, exportSessionClean, exportSessionBlaDnc, exportSessionFull } from '../controllers/sessionController.js';
 
 const digest = (value) => createHash('sha256').update(value).digest();
 
@@ -151,6 +151,7 @@ export function createIntegrationRouter(deps = {}) {
   router.get('/checks/:id', getSession);
   router.get('/checks/:id/records', getSessionRecords);
   router.get('/checks/:id/export/clean', exportSessionClean);
+  router.get('/checks/:id/export/bla-dnc', exportSessionBlaDnc);
   router.get('/checks/:id/export/full', exportSessionFull);
   return router;
 }

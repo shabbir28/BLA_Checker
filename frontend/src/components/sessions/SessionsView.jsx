@@ -317,6 +317,17 @@ export function SessionsView({ onSelectSession, onOpenNewScrub }) {
                       </td>
                       <td>
                         <div className="flex items-center justify-end gap-1.5">
+                          {s.status === 'COMPLETED' && s.bla_verified !== false && s.bla_dnc_count > 0 ? (
+                            <button
+                              onClick={() => handleDownload(s.id, 'bla-dnc', 'csv')}
+                              disabled={downloadingId === s.id}
+                              className="btn-icon !text-red-400 hover:!border-red-900/60"
+                              title="Download BLA DNC CSV"
+                              aria-label="Download BLA DNC CSV"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
                           {s.status === 'COMPLETED' && s.bla_verified !== false && s.clean_count > 0 ? (
                             <button
                               onClick={() => handleDownload(s.id, 'clean', 'csv')}

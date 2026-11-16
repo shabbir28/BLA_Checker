@@ -205,16 +205,15 @@ export class BlaService {
           console.warn(`[BLA] Conflicting results for ${phone} across passes — using conservative DNC result (isDnc=${isDnc}). observations:`, JSON.stringify(observations));
         }
         const evidence = { verification: 'bulk-double-check-v1', observations, conflict };
+        const line = observations.every((r) => r.line === observations[0].line) ? observations[0].line : (observations[0]?.line || 'Unknown');
         if (isDnc) {
           const code = [...new Set(observations.filter((r) => r.suppressed && r.code).map((r) => r.code))].join(',');
           const reason = portalLabel(code);
           results.set(phone, {
             isDnc: true, status: 'BLA_DNC', reason,
-            raw: stamp({ suppressed: true, reason, code: code || null, ...evidence }),
+            raw: stamp({ suppressed: true, reason, line, code: code || null, ...evidence }),
           });
         } else {
-          // A changing line type is not a verified wireless/landline classification.
-          const line = observations.every((r) => r.line === observations[0].line) ? observations[0].line : 'Unknown';
           results.set(phone, {
             isDnc: false, status: 'CLEAN', reason: `Good - ${line}`,
             raw: stamp({ suppressed: false, status: 'CLEAN', line, ...evidence }),

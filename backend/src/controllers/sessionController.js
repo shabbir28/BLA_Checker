@@ -220,9 +220,11 @@ export async function getSession(req, res) {
     }
 
     const counts = await query(
-      `SELECT COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Wireless')::int AS wireless_count,
-              COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Landline')::int AS landline_count
-       FROM session_records WHERE session_id = $1 AND status = 'CLEAN'`,
+      `SELECT COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Wireless' AND status = 'CLEAN')::int AS wireless_count,
+              COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Landline' AND status = 'CLEAN')::int AS landline_count,
+              COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Wireless' AND status = 'BLA_DNC')::int AS bla_dnc_wireless_count,
+              COUNT(*) FILTER (WHERE (${LINE_TYPE_SQL}) = 'Landline' AND status = 'BLA_DNC')::int AS bla_dnc_landline_count
+       FROM session_records WHERE session_id = $1`,
       [id]
     );
     Object.assign(session, counts.rows[0]);
@@ -269,7 +271,8 @@ export async function getSessionRecords(req, res) {
 
     const dataParams = [...params, limit, offset];
     const dataRes = await query(
-      `SELECT id, session_id, raw_phone, normalized_phone, original_row_data, status, reason, bla_response_raw, created_at
+      `SELECT id, session_id, raw_phone, normalized_phone, original_row_data, status, reason, bla_response_raw, created_at,
+              (${LINE_TYPE_SQL}) AS line_type
        FROM session_records
        ${whereSql}
        ORDER BY id ASC
@@ -316,6 +319,25 @@ function cleanExportRow(record) {
   }
   row.Clean_Phone = phone || tenDigitPhone(record.normalized_phone);
   row.Scrub_Status = 'CLEAN';
+  row.Line_Type = record.line_type || 'Unknown';
+  return row;
+}
+
+function blaDncExportRow(record) {
+  const orig = typeof record.original_row_data === 'string'
+    ? JSON.parse(record.original_row_data)
+    : (record.original_row_data || {});
+  const phone = tenDigitPhone(record.normalized_phone) || tenDigitPhone(record.raw_phone);
+  const rawDigits = String(record.raw_phone ?? '').replace(/\D/g, '');
+  const row = {};
+  for (const [key, value] of Object.entries(orig)) {
+    const valueDigits = String(value ?? '').replace(/\D/g, '');
+    const sameNumber = valueDigits && (valueDigits === rawDigits || valueDigits === phone || valueDigits === `1${phone}`);
+    row[key] = sameNumber && phone ? phone : value;
+  }
+  row.DNC_Phone = phone || tenDigitPhone(record.normalized_phone);
+  row.Scrub_Status = 'BLA_DNC';
+  row.DNC_Reason = record.reason || 'Blacklist Alliance DNC';
   row.Line_Type = record.line_type || 'Unknown';
   return row;
 }
@@ -511,6 +533,118 @@ export async function exportSessionClean(req, res) {
   } catch (error) {
     console.error('[SESSION] Clean export error:', error);
     return res.status(500).json({ message: 'Failed to export clean leads: ' + error.message });
+  }
+}
+
+export async function exportSessionBlaDnc(req, res) {
+  try {
+    const { id } = req.params;
+    const format = (req.query.format || 'csv').toLowerCase();
+
+    const sessionRes = await query('SELECT * FROM checking_sessions WHERE id = $1', [id]);
+    if (sessionRes.rows.length === 0) return res.status(404).json({ message: 'Session not found.' });
+    const session = sessionRes.rows[0];
+
+    if (req.user.role !== 'admin' && session.user_id !== req.user.id) {
+      return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    if (session.status === 'FAILED' || session.stage === 'FAILED') {
+      const errorMsg = session.error_message || 'BLA verification failed';
+      return res.status(400).json({
+        message: `File cannot be downloaded because BLA checking encountered an error: ${errorMsg}.`,
+        error: errorMsg,
+        status: 'FAILED',
+      });
+    }
+
+    if (session.status !== 'COMPLETED' || session.stage !== 'DONE') {
+      return res.status(400).json({
+        message: `File cannot be downloaded yet. BLA checking is currently in progress (${session.stage || session.status}). Please wait until verification completes.`,
+        status: session.status,
+        stage: session.stage,
+      });
+    }
+
+    if (session.bla_verified === false) {
+      return res.status(400).json({
+        message: 'File cannot be downloaded because it was not verified by the Blacklist Alliance (BLA) API.',
+        status: 'UNVERIFIED',
+      });
+    }
+
+    if (!session.bla_dnc_count || parseInt(session.bla_dnc_count, 10) <= 0) {
+      return res.status(400).json({
+        message: 'No BLA DNC numbers found in this file to download.',
+        bla_dnc_count: 0,
+      });
+    }
+
+    const lineType = req.query.lineType;
+    if (lineType !== undefined && !['Wireless', 'Landline'].includes(lineType)) {
+      return res.status(400).json({ message: 'Invalid line type. Use Wireless or Landline.' });
+    }
+    const exportParams = lineType ? [id, lineType] : [id];
+    const lineFilter = lineType ? ` AND (${LINE_TYPE_SQL}) = $2` : '';
+    const suffix = lineType ? `BLA_DNC_${lineType.toUpperCase()}` : 'BLA_DNC';
+    const safeSessionName = session.session_name.replace(/[^a-zA-Z0-9_-]/g, '_');
+    let blaDncCount = parseInt(session.bla_dnc_count, 10);
+    if (lineType) {
+      const countRes = await query(
+        `SELECT COUNT(*)::int AS total FROM session_records
+         WHERE session_id = $1 AND status = 'BLA_DNC'${lineFilter}`, exportParams
+      );
+      blaDncCount = countRes.rows[0].total;
+      if (!blaDncCount) return res.status(400).json({ message: `No BLA DNC ${lineType.toLowerCase()} numbers found in this file.` });
+    }
+
+    if (format === 'xlsx' && blaDncCount > 200000) {
+      return res.status(400).json({
+        message: 'This file is too large for Excel. Download DNC from BLA as CSV, then open that CSV in Excel.',
+      });
+    }
+
+    if (String(req.query.check || '') === '1') {
+      return res.json({ ok: true, filename: `${safeSessionName}_${suffix}.${format === 'xlsx' ? 'xlsx' : 'csv'}` });
+    }
+
+    if (format === 'xlsx') {
+      const recordsRes = await query(
+        `SELECT raw_phone, normalized_phone, original_row_data, reason, (${LINE_TYPE_SQL}) AS line_type
+         FROM session_records
+         WHERE session_id = $1 AND status = 'BLA_DNC'${lineFilter}
+         ORDER BY id ASC`,
+        exportParams
+      );
+      const exportData = recordsRes.rows.map(blaDncExportRow);
+      if (exportData.length === 0) {
+        return res.status(400).json({ message: 'No BLA DNC records found for this session.' });
+      }
+      const worksheet = xlsx.utils.json_to_sheet(exportData);
+      keepPhonesAsText(worksheet);
+      const workbook = xlsx.utils.book_new();
+      xlsx.utils.book_append_sheet(workbook, worksheet, 'BLA DNC Leads');
+      const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+      markDownload(res);
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeSessionName}_${suffix}.xlsx"`);
+      return res.send(buffer);
+    }
+
+    return streamCsv(res, {
+      filename: `${safeSessionName}_${suffix}.csv`,
+      sql: `SELECT raw_phone, normalized_phone, original_row_data, reason, (${LINE_TYPE_SQL}) AS line_type
+            FROM session_records
+            WHERE session_id = $1 AND status = 'BLA_DNC'${lineFilter}
+            ORDER BY id ASC`,
+      params: exportParams,
+      emptyMessage: 'No BLA DNC records found for this session.',
+      mapRow: blaDncExportRow,
+    });
+  } catch (error) {
+    console.error('[SESSION] BLA DNC export error:', error);
+    return res.status(500).json({ message: 'Failed to export BLA DNC leads: ' + error.message });
   }
 }
 

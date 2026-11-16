@@ -112,6 +112,18 @@ function ResultTiles({ session, cleanHint, selected, onSelect, downloading, onDo
           onClick={onSelect ? () => onSelect(card) : undefined}
         />
         {card.key === 'CLEAN' && <CleanDownloadButton session={session} downloading={downloading} onDownload={onDownload} />}
+        {card.key === 'BLA_DNC' && (
+          <button
+            type="button"
+            className="absolute right-3 top-3 rounded p-1 text-red-300 transition hover:bg-red-900/40 focus-visible:outline focus-visible:outline-2 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={session.status !== 'COMPLETED' || session.bla_verified === false || !session.bla_dnc_count || Boolean(downloading)}
+            onClick={() => onDownload('bla-dnc', 'csv')}
+            aria-label="Download BLA DNC numbers as CSV"
+            title="Download BLA DNC numbers as CSV"
+          >
+            {downloading === 'bla-dnc-csv' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          </button>
+        )}
         </div>
       ))}
       <LineTypeCards session={session} downloading={downloading} onDownload={onDownload} />
@@ -694,6 +706,28 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
                 {downloading === 'clean-xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 text-emerald-400" />}
                 Clean numbers (Excel)
               </button>
+              {activeSession.bla_dnc_count > 0 && (
+                <>
+                  <button
+                    onClick={() => handleDownload('bla-dnc', 'csv')}
+                    disabled={Boolean(downloading)}
+                    className="btn-secondary !border-red-900/50 !text-red-300 hover:!bg-red-950/40"
+                    title="Download BLA DNC numbers as CSV"
+                  >
+                    {downloading === 'bla-dnc-csv' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    DNC from BLA (CSV)
+                  </button>
+                  <button
+                    onClick={() => handleDownload('bla-dnc', 'xlsx')}
+                    disabled={Boolean(downloading)}
+                    className="btn-secondary !border-red-900/50 !text-red-300 hover:!bg-red-950/40"
+                    title="Download BLA DNC numbers as Excel"
+                  >
+                    {downloading === 'bla-dnc-xlsx' ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 text-red-400" />}
+                    DNC from BLA (Excel)
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
@@ -731,7 +765,18 @@ export function LeadCheckerStudio({ onViewSessionDetails, onScrubComplete }) {
                             <p className="font-mono text-[11px] text-zinc-500">{rec.normalized_phone}</p>
                           )}
                         </div>
-                        <p className="text-xs text-zinc-400 sm:max-w-[50%] sm:text-right">{rec.reason || 'Verified'}</p>
+                        <div className="flex items-center gap-2 sm:max-w-[50%] sm:justify-end">
+                          {rec.line_type && rec.line_type !== 'Unknown' && (
+                            <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium font-mono ${
+                              rec.line_type === 'Wireless'
+                                ? 'bg-blue-950/60 text-blue-300 border border-blue-800/50'
+                                : 'bg-purple-950/60 text-purple-300 border border-purple-800/50'
+                            }`}>
+                              {rec.line_type}
+                            </span>
+                          )}
+                          <p className="text-xs text-zinc-400 truncate">{rec.reason || 'Verified'}</p>
+                        </div>
                       </li>
                     ))}
                   </ul>
